@@ -1,0 +1,30 @@
+name:                mojito
+version:             0.0.0
+Cabal-Version:       >= 1.2
+synopsis:            Simple functional language with type inference
+description:         The mojito package gives enough implementation
+                     context to play with type inference algorithms. It uses
+                     a simple s-expressions syntax. Milner's algorithm and
+                     System CT (the 1999 version) are implemented.
+category:            Language
+license:             BSD3
+license-file:        LICENSE
+author:              Vo Minh Thu
+maintainer:          noteed@gmail.com
+build-type:          Simple
+
+executable mojito
+  main-is:             mojito.hs
+  build-depends:       base >= 4 && < 5,
+                       parsec, pretty, prettyclass,
+                       network, fastcgi,
+                       monads-fd, transformers,
+                       array, containers,
+                       xhtml,
+                       time, datetime,
+                       HUnit
+  ghc-options:         -Wall
+                       -O2
+                       -prof
+                       -auto-all
+
