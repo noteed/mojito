@@ -56,17 +56,24 @@ translateDecl d = case d of
 -- freshly renamed to enable polymorphism) is done by the use
 -- of list of non-generic variables (expanded in a similar way
 -- to the environment).
+--data Type =
+--    Var String
+--  | Op String [Type]
+--  deriving (Show, Eq)
+
 data Type =
-    Var String
-  | Op String [Type]
+    TyCon String
+  | TyVar String
+  | TyApp Type Type
   deriving (Show, Eq)
 
 -- Returns the list of type variables in a type.
 vars :: Type -> [String]
 vars = nub . f
   where
-    f (Var a) = [a]
-    f (Op _ as) = concatMap f as
+    f (TyVar a) = [a]
+    f (TyCon _) = []
+    f (TyApp s1 s2) = f s1 ++ f s2
 
 -- A (type) substitution is a function from type variables to
 -- types that differs from the identity function only on finitely
@@ -105,7 +112,7 @@ rename :: String -> State S Type
 rename a = do
   n <- gets nextId
   modify (\s -> s { nextId = n + 1 })
-  return (Var $ a ++ show n)
+  return (TyVar $ a ++ show n)
 
 -- Compose the given substitution with the current substitution.
 compose :: Substitution -> State S ()
@@ -131,27 +138,22 @@ type Env = [(String,Type)]
 -- Occur check: tests if a type variable appears in a given
 -- type.
 occurs :: String -> Type -> Bool
-occurs a (Var b) = a == b
-occurs a (Op _ ts) = or (map (occurs a) ts)
+occurs a (TyVar b) = a == b
+occurs a (TyCon _) = False
+occurs a (TyApp t1 t2) = occurs a t1 || occurs a t2
 
 -- Returns a substitution unifying two types.
 unify :: Type -> Type -> Substitution
-unify t1@(Var a) t2 | t1 == t2 = []
-                    | a `occurs` t2 = error $ show t1 ++ " occurs in " ++ show t2
-                    | otherwise = [(a,t2)]
-unify t1 t2@(Var _) = unify t2 t1
-unify (Op s1 args1) (Op s2 args2)
-  | s1 == s2 && length args1 == length args2 = unify' args1 args2
-unify t1 t2 = error $ "can't match " ++ show t1 ++ " against " ++ show t2
-
-unify' :: [Type] -> [Type] -> Substitution
-unify' [] [] = []
-unify' (a:as) (b:bs) =
-  let s1 = unify a b
-      s2 = unify' (map (subs s1) as) (map (subs s1) bs)
+unify t1@(TyVar a) t2 | t1 == t2 = []
+                      | a `occurs` t2 = error $ show t1 ++ " occurs in " ++ show t2
+                      | otherwise = [(a,t2)]
+unify t1 t2@(TyVar _) = unify t2 t1
+unify (TyCon c1) (TyCon c2) | c1 == c2 = []
+unify (TyApp t1 t2) (TyApp t3 t4) =
+  let s1 = unify t1 t3
+      s2 = unify (subs s1 t2) (subs s1 t4)
   in comp s1 s2
-unify' _ _ = error "not same number of arguments"
--- won't be called by unify as it already performs the check on the lengths.
+unify t1 t2 = error $ "can't match " ++ show t1 ++ " against " ++ show t2
 
 comp :: Substitution -> Substitution -> Substitution
 comp ts1 ts2 = foldr f ts2 ts1
@@ -161,18 +163,20 @@ comp ts1 ts2 = foldr f ts2 ts1
         ext :: String -> Type -> [(String,Type)] -> [(String,Type)]
         ext t1 t2 ts = case lookup t1 ts of
           Nothing -> case t2 of
-                       Op _ _ -> (t1,t2) : rep t1 t2 ts
-                       Var a -> case lookup a ts of
-                                  Nothing -> (t1,t2) : rep t1 t2 ts
-                                  Just t3 -> (t1,t3) : rep t1 t3 ts
+                       TyApp _ _ -> (t1,t2) : rep t1 t2 ts
+                       TyCon _ -> (t1,t2) : rep t1 t2 ts
+                       TyVar a -> case lookup a ts of
+                                    Nothing -> (t1,t2) : rep t1 t2 ts
+                                    Just t3 -> (t1,t3) : rep t1 t3 ts
           Just _ -> error $ "comp: " ++ show t1 ++ " is already present in : " ++ show ts ++ " to be replaced by " ++ show t2
         rep a b cs = let g (x,y) = (x, replace a b `subs` y)
                      in map g cs
 
 -- Apply a substitution to a type.
 subs :: Substitution -> Type -> Type
-subs ts (Op s args) = Op s (map (subs ts) args)
-subs ts t@(Var a) = maybe t id $ lookup a ts
+subs ts (TyApp a1 a2) = TyApp (subs ts a1) (subs ts a2)
+subs ts t@(TyVar a) = maybe t id $ lookup a ts
+subs ts (TyCon c) = TyCon c
 
 -- Builds a substitution which replace the first argument
 -- by the second.
@@ -212,16 +216,16 @@ retrieve a tenv ng = case lookup a tenv of
     fresh t' ng
 
 fun :: Type -> Type -> Type
-fun a b = Op "->" [a,b]
+fun a b = TyCon "->" `TyApp` a `TyApp` b
 
 bool :: Type
-bool = Op "bool" []
+bool = TyCon "bool"
 
 int :: Type
-int = Op "int" []
+int = TyCon "int"
 
 pair :: Type -> Type -> Type
-pair a b = Op "," [a,b]
+pair a b = TyCon "," `TyApp` a `TyApp` b
 
 true, false, one, two :: Expr
 true = Id "true"
@@ -235,9 +239,9 @@ initialEnv =
   , ("false", bool)
   , ("1", int)
   , ("2", int)
-  , ("mkPair", fun (Var "a") (fun (Var "b") (pair (Var "a") (Var "b"))))
-  , ("fst", fun (pair (Var "a") (Var "b")) (Var "a"))
-  , ("snd", fun (pair (Var "a") (Var "b")) (Var "b"))
+  , ("mkPair", fun (TyVar "a") (fun (TyVar "b") (pair (TyVar "a") (TyVar "b"))))
+  , ("fst", fun (pair (TyVar "a") (TyVar "b")) (TyVar "a"))
+  , ("snd", fun (pair (TyVar "a") (TyVar "b")) (TyVar "b"))
   , ("iszero", fun int bool)
   , ("+", fun int (fun int int))
   ]
@@ -262,7 +266,7 @@ analyzeExpr e env ng = case e of
     compose $ unify t2 t3
     substitute t2
   Fun x e2 -> do
-    t1@(Var v) <- rename x
+    t1@(TyVar v) <- rename x
     let env' = extend x t1 env
         ng' = v : ng
     t2 <- analyzeExpr e2 env' ng'
@@ -296,7 +300,7 @@ analyzeRecBind :: Decl -> Env -> [String] -> State S (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
-    t1@(Var v) <- rename x
+    t1@(TyVar v) <- rename x
     note $ x ++ " is renamed " ++ v
     return (extend x t1 env, v : ng)
   Seq d1 d2 -> do
@@ -329,9 +333,9 @@ infer env e = evalState (analyzeExpr e env []) initialS
 
 showType :: Type -> String
 showType t = case t of
-  Var a -> a
-  Op s [] -> s
-  Op s ts -> "(" ++ s ++ " " ++ concat (intersperse " " $ map showType ts) ++ ")"
+  TyVar a -> a
+  TyCon c -> c
+  TyApp a1 a2 -> "(" ++ showType a1 ++ " " ++ showType a2 ++ ")"
 
 ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex9, ex10, ex11, ex12, ex13, ex14 :: Expr
 ex15, ex16, ex17, ex9' :: Expr
