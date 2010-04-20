@@ -10,6 +10,11 @@ import Control.Monad.State
 import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Substitution
+import qualified Language.Mojito.Inference.Unification as U
+
+unify a b = case U.unify a b of
+  Left err -> error err
+  Right s -> s
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings
@@ -85,19 +90,6 @@ substitute t = do
 -- association list. (The function is provided in the
 -- S).
 type Env = [(String,Simple)]
-
--- Returns a substitution unifying two types.
-unify :: Simple -> Simple -> Substitution
-unify t1@(TyVar a) t2 | t1 == t2 = []
-                      | a `occurs` t2 = error $ show t1 ++ " occurs in " ++ show t2
-                      | otherwise = [(a,t2)]
-unify t1 t2@(TyVar _) = unify t2 t1
-unify (TyCon c1) (TyCon c2) | c1 == c2 = []
-unify (TyApp t1 t2) (TyApp t3 t4) =
-  let s1 = unify t1 t3
-      s2 = unify (subs s1 t2) (subs s1 t4)
-  in comp "unify" s1 s2
-unify t1 t2 = error $ "can't match " ++ show t1 ++ " against " ++ show t2
 
 -- Returns the generic variables of a type, i.e. the
 -- variables not in the list of non-generic variables.
