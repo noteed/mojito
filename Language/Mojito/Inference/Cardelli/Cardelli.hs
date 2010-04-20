@@ -26,10 +26,6 @@ import Language.Mojito.Inference.Substitution
 -- freshly renamed to enable polymorphism) is done by the use
 -- of list of non-generic variables (expanded in a similar way
 -- to the environment).
---data Type =
---    Var String
---  | Op String [Type]
---  deriving (Show, Eq)
 
 -- A (type) substitution is a function from type variables to
 -- types that differs from the identity function only on finitely
@@ -89,13 +85,6 @@ substitute t = do
 -- association list. (The function is provided in the
 -- S).
 type Env = [(String,Simple)]
-
--- Occur check: tests if a type variable appears in a given
--- type.
-occurs :: String -> Simple -> Bool
-occurs a (TyVar b) = a == b
-occurs _ (TyCon _) = False
-occurs a (TyApp t1 t2) = occurs a t1 || occurs a t2
 
 -- Returns a substitution unifying two types.
 unify :: Simple -> Simple -> Substitution

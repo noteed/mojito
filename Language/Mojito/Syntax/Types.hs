@@ -29,6 +29,20 @@ tc (TyCon s) = [s]
 tc (TyVar _) = []
 tc (TyApp t1 t2) = tc t1 ++ tc t2
 
+-- Occur check: tests if a type variable appears in a given
+-- type.
+occurs :: String -> Simple -> Bool
+occurs a (TyVar b) = a == b
+occurs _ (TyCon _) = False
+occurs a (TyApp t1 t2) = occurs a t1 || occurs a t2
+
+-- Is it faster ?
+-- Occur check: tests if a type variable appears in a given
+-- type.
+-- occurs :: String -> Simple -> Bool
+-- occurs a t = a `elem` tv t
+
+
 tc' :: [Simple] -> [String]
 tc' = concatMap tc
 
