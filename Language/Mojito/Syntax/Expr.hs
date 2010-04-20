@@ -221,6 +221,8 @@ showSimple (TyVar a) = a
 showSimple (TyApp t1 t2) = "(" ++ showSimple t1 ++ " " ++ showSimple t2 ++ ")"
 
 tc :: Simple -> [String]
+-- TODO nub the result, or use union instead of ++
+-- tc is also Substitution.vars
 tc (TyCon s) = [s]
 tc (TyVar _) = []
 tc (TyApp t1 t2) = tc t1 ++ tc t2

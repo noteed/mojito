@@ -61,14 +61,14 @@ translateDecl d = case d of
 --  | Op String [Type]
 --  deriving (Show, Eq)
 
-data Type =
+data Simple =
     TyCon String
   | TyVar String
-  | TyApp Type Type
+  | TyApp Simple Simple
   deriving (Show, Eq)
 
 -- Returns the list of type variables in a type.
-vars :: Type -> [String]
+vars :: Simple -> [String]
 vars = nub . f
   where
     f (TyVar a) = [a]
@@ -86,7 +86,7 @@ vars = nub . f
 -- Instead of modifying the environment each time a new substitution
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
-type Substitution = [(String,Type)]
+type Substitution = [(String,Simple)]
 
 data S = S
   { nextId :: Int
@@ -108,7 +108,7 @@ note :: Monad m => String -> m ()
 note _ = return ()
 
 -- Creates a unique type variable from a string.
-rename :: String -> State S Type
+rename :: String -> State S Simple
 rename a = do
   n <- gets nextId
   modify (\s -> s { nextId = n + 1 })
@@ -122,7 +122,7 @@ compose ts = do
   modify (\s -> s { substitution = comp ts n })
 
 -- Returns a type using the current substitution.
-substitute :: MonadState S m => Type -> m Type
+substitute :: MonadState S m => Simple -> m Simple
 substitute t = do
   n <- gets substitution
   return (subs n t)
@@ -133,17 +133,17 @@ substitute t = do
 -- is used when the identifer can't be found in the
 -- association list. (The function is provided in the
 -- S).
-type Env = [(String,Type)]
+type Env = [(String,Simple)]
 
 -- Occur check: tests if a type variable appears in a given
 -- type.
-occurs :: String -> Type -> Bool
+occurs :: String -> Simple -> Bool
 occurs a (TyVar b) = a == b
 occurs a (TyCon _) = False
 occurs a (TyApp t1 t2) = occurs a t1 || occurs a t2
 
 -- Returns a substitution unifying two types.
-unify :: Type -> Type -> Substitution
+unify :: Simple -> Simple -> Substitution
 unify t1@(TyVar a) t2 | t1 == t2 = []
                       | a `occurs` t2 = error $ show t1 ++ " occurs in " ++ show t2
                       | otherwise = [(a,t2)]
@@ -160,7 +160,7 @@ comp ts1 ts2 = foldr f ts2 ts1
   where f t ts = ext (fst t) (snd t) ts
 
         -- adds a new pair to the substitution, and "performs" it in-place.
-        ext :: String -> Type -> [(String,Type)] -> [(String,Type)]
+        ext :: String -> Simple -> [(String,Simple)] -> [(String,Simple)]
         ext t1 t2 ts = case lookup t1 ts of
           Nothing -> case t2 of
                        TyApp _ _ -> (t1,t2) : rep t1 t2 ts
@@ -173,24 +173,24 @@ comp ts1 ts2 = foldr f ts2 ts1
                      in map g cs
 
 -- Apply a substitution to a type.
-subs :: Substitution -> Type -> Type
+subs :: Substitution -> Simple -> Simple
 subs ts (TyApp a1 a2) = TyApp (subs ts a1) (subs ts a2)
 subs ts t@(TyVar a) = maybe t id $ lookup a ts
 subs ts (TyCon c) = TyCon c
 
 -- Builds a substitution which replace the first argument
 -- by the second.
-replace :: String -> Type -> Substitution
+replace :: String -> Simple -> Substitution
 replace a t = [(a,t)]
 
 -- Returns the generic variables of a type, i.e. the
 -- variables not in the list of non-generic variables.
-gvars :: Type -> [String] -> [String]
+gvars :: Simple -> [String] -> [String]
 gvars t ng = vars t \\ ng
 
 -- Given a type, returns the same type with all the
 -- generic variables renamed with fresh names.
-fresh :: Type -> [String] -> State S Type
+fresh :: Simple -> [String] -> State S Simple
 fresh t ng = do
   let gs = gvars t ng
   gs' <- mapM rename gs
@@ -198,13 +198,13 @@ fresh t ng = do
 
 -- Extends a type environment with a new pair
 -- identifier/type.
-extend :: String -> Type -> Env -> Env
+extend :: String -> Simple -> Env -> Env
 extend s t = (:) (s,t)
 
 -- Retrieves the type corresponding to an identifier,
 -- giving fresh names to its generic variables, and
 -- applying the current substitution.
-retrieve :: String -> Env -> [String] -> State S Type
+retrieve :: String -> Env -> [String] -> State S Simple
 retrieve a tenv ng = case lookup a tenv of
   Nothing -> error $ "unbound type variable " ++ a
   Just t -> do
@@ -215,16 +215,16 @@ retrieve a tenv ng = case lookup a tenv of
     t' <- substitute t
     fresh t' ng
 
-fun :: Type -> Type -> Type
+fun :: Simple -> Simple -> Simple
 fun a b = TyCon "->" `TyApp` a `TyApp` b
 
-bool :: Type
+bool :: Simple
 bool = TyCon "bool"
 
-int :: Type
+int :: Simple
 int = TyCon "int"
 
-pair :: Type -> Type -> Type
+pair :: Simple -> Simple -> Simple
 pair a b = TyCon "," `TyApp` a `TyApp` b
 
 true, false, one, two :: Expr
@@ -251,7 +251,7 @@ initialEnv =
 -- tenv: the type environment
 -- ng: the non-generic variables
 -- typingState: state monad used to perform the typing
-analyzeExpr :: Expr -> Env -> [String] -> State S Type
+analyzeExpr :: Expr -> Env -> [String] -> State S Simple
 analyzeExpr e env ng = case e of
   Id a -> do
     note "Id"
@@ -324,18 +324,18 @@ analyzeRec decl env ng = case decl of
     analyzeRec d2 env ng
   Rec d -> analyzeRec d env ng
 
-typeExpr :: Expr -> (Type, S)
+typeExpr :: Expr -> (Simple, S)
 typeExpr e = (t,s)
   where (t,s) = runState (analyzeExpr e initialEnv []) initialS
 
-infer :: Env -> Expr -> Type
+infer :: Env -> Expr -> Simple
 infer env e = evalState (analyzeExpr e env []) initialS
 
-showType :: Type -> String
-showType t = case t of
+showSimple :: Simple -> String
+showSimple t = case t of
   TyVar a -> a
   TyCon c -> c
-  TyApp a1 a2 -> "(" ++ showType a1 ++ " " ++ showType a2 ++ ")"
+  TyApp a1 a2 -> "(" ++ showSimple a1 ++ " " ++ showSimple a2 ++ ")"
 
 ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex9, ex10, ex11, ex12, ex13, ex14 :: Expr
 ex15, ex16, ex17, ex9' :: Expr
