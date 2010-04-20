@@ -7,49 +7,17 @@ module Language.Mojito.Inference.Cardelli.Cardelli where
 import Data.List ((\\))
 import Control.Monad.State
 
-import qualified Language.Mojito.Syntax.Expr as E
+import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Substitution
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings
 -- (lambda-bound identifiers are not polymorphic).
-data Expr =
-    Id String
-  | If Expr Expr Expr
-  | Fun String Expr
-  | App Expr Expr
-  | Let Decl Expr
-  deriving Show
 
 -- d ::= x = e | d ; d | rec d
 -- Multiple defintions can be given in a single let construct.
 -- The definitions can be (mutually) recursive.
-data Decl =
-    Def String Expr
-  | Seq Decl Decl
-  | Rec Decl
-  deriving Show
-
--- Temporary code to translate the final Expr to this one.
-translateExpr :: E.Expr a -> Expr
-translateExpr e = case e of
-  E.Id _ s -> Id s
-  E.FltLit _ f -> Id (show f)
-  E.IntLit _ i -> Id (show i)
-  E.StrLit _ s -> Id (show s)
-  E.If _ e1 e2 e3 -> If (translateExpr e1) (translateExpr e2) (translateExpr e3)
-  E.Fun _ x e1 -> Fun x (translateExpr e1)
-  E.App _ e1 e2 -> App (translateExpr e1) (translateExpr e2)
-  E.Let _ d e1 -> Let (translateDecl d) (translateExpr e1)
-  E.Case _ _ _ -> error "TODO"
-  E.HasType _ _ _ -> error "TODO"
-
-translateDecl :: E.Decl a -> Decl
-translateDecl d = case d of
-  E.Def x e -> Def x (translateExpr e)
-  E.Seq d1 d2 -> Seq (translateDecl d1) (translateDecl d2)
-  E.Rec d1 -> Rec (translateDecl d1)
 
 -- A type is either a type variable or a type operator with
 -- some arguments. Functions, pairs, ... are represented with
@@ -126,7 +94,7 @@ type Env = [(String,Simple)]
 -- type.
 occurs :: String -> Simple -> Bool
 occurs a (TyVar b) = a == b
-occurs a (TyCon _) = False
+occurs _ (TyCon _) = False
 occurs a (TyApp t1 t2) = occurs a t1 || occurs a t2
 
 -- Returns a substitution unifying two types.
@@ -186,11 +154,13 @@ int = TyCon "int"
 pair :: Simple -> Simple -> Simple
 pair a b = TyCon "," `TyApp` a `TyApp` b
 
-true, false, one, two :: Expr
-true = Id "true"
-false = Id "false"
-one = Id "1"
-two = Id "2"
+u = undefined
+
+true, false, one, two :: Expr a
+true = Id u "true"
+false = Id u "false"
+one = Id u "1"
+two = Id u "2"
 
 initialEnv :: Env
 initialEnv =
@@ -210,38 +180,55 @@ initialEnv =
 -- tenv: the type environment
 -- ng: the non-generic variables
 -- typingState: state monad used to perform the typing
-analyzeExpr :: Expr -> Env -> [String] -> State S Simple
+analyzeExpr :: Expr a -> Env -> [String] -> State S Simple
 analyzeExpr e env ng = case e of
-  Id a -> do
+  Id _ a -> do
     note "Id"
     t <- retrieve a env ng
     note $ a ++ " has type " ++ show t
     return t
-  If e1 e2 e3 -> do
+  FltLit _ a -> do
+    note "FltLit"
+    t <- retrieve (show a) env ng
+    note $ show a ++ " has type " ++ show t
+    return t
+  IntLit _ a -> do
+    note "IntLit"
+    t <- retrieve (show a) env ng
+    note $ show a ++ " has type " ++ show t
+    return t
+  StrLit _ a -> do
+    note "StrLit"
+    t <- retrieve (show a) env ng
+    note $ show a ++ " has type " ++ show t
+    return t
+  If _ e1 e2 e3 -> do
     t1 <- analyzeExpr e1 env ng
     compose $ unify t1 bool
     t2 <- analyzeExpr e2 env ng
     t3 <- analyzeExpr e3 env ng
     compose $ unify t2 t3
     substitute t2
-  Fun x e2 -> do
+  Fun _ x e2 -> do
     t1@(TyVar v) <- rename x
     let env' = extend x t1 env
         ng' = v : ng
     t2 <- analyzeExpr e2 env' ng'
     substitute (fun t1 t2)
-  App e1 e2 -> do
+  App _ e1 e2 -> do
     t1 <- analyzeExpr e1 env ng
     t2 <- analyzeExpr e2 env ng
     t3 <- rename "return"
     compose $ unify t1 (fun t2 t3)
     substitute t3
-  Let decl e1 -> do
+  Let _ decl e1 -> do
     note "Let"
     env' <- analyzeDecl decl env ng
     analyzeExpr e1 env' ng
+  Case _ _ _ -> error "TODO Case"
+  HasType _ _ _ -> error "TODO HasType"
 
-analyzeDecl :: Decl -> Env -> [String] -> State S Env
+analyzeDecl :: Decl a -> Env -> [String] -> State S Env
 analyzeDecl decl env ng = case decl of
   Def x e1 -> do
     t1 <- analyzeExpr e1 env ng
@@ -255,7 +242,7 @@ analyzeDecl decl env ng = case decl of
     analyzeRec d env' ng'
     return env'
 
-analyzeRecBind :: Decl -> Env -> [String] -> State S (Env, [String])
+analyzeRecBind :: Decl a -> Env -> [String] -> State S (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
@@ -267,7 +254,7 @@ analyzeRecBind decl env ng = case decl of
     analyzeRecBind d2 env' ng'
   Rec d -> analyzeRecBind d env ng
 
-analyzeRec :: Decl -> Env -> [String] -> State S ()
+analyzeRec :: Decl a -> Env -> [String] -> State S ()
 analyzeRec decl env ng = case decl of
   Def x e1 -> do
     note "Def"
@@ -283,33 +270,10 @@ analyzeRec decl env ng = case decl of
     analyzeRec d2 env ng
   Rec d -> analyzeRec d env ng
 
-typeExpr :: Expr -> (Simple, S)
+typeExpr :: Expr a -> (Simple, S)
 typeExpr e = (t,s)
   where (t,s) = runState (analyzeExpr e initialEnv []) initialS
 
-infer :: Env -> Expr -> Simple
+infer :: Env -> Expr a -> Simple
 infer env e = evalState (analyzeExpr e env []) initialS
 
-ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex9, ex10, ex11, ex12, ex13, ex14 :: Expr
-ex15, ex16, ex17, ex9' :: Expr
-ex1 = (Fun "x" (Id "x"))
-ex2 = one
-ex3 = (App ex1 one)
-
-ex7 = (App ex1 ex1) `App` one
-ex8 = (Let (Def "id" ex1) (Id "id" `App` one))
-ex9 = (Let (Def "id" ex1) (Id "id" `App` Id "id" `App` one))
-ex9' = (Let (Rec (Def "id" ex1)) (Id "id" `App` Id "id" `App` one))
-ex10 = (Fun "f" (Id "f" `App` Id "f" `App` one)) `App` ex1
-
-ex4 = (App ex1 false)
-ex5 = (App (Id "mkPair") one)
-ex6 = (App (App (Id "mkPair") one) true)
-
-ex11 = (Let (Def "a" one `Seq` Def "b" (Id "a")) (Id "b"))
-ex12 = (Let (Def "a" (Id "b") `Seq` Def "b" two) (Id "a"))
-ex13 = (Let (Rec $ Def "a" one) (Id "a"))
-ex16 = (Let (Rec $ Def "a" one) (If (Id "a") true false))
-ex17 = (Let (Def "a" one) (If (Id "a") true false))
-ex14 = (Let (Rec $ Def "a" (Id "b") `Seq` Def "b" two) (Id "a"))
-ex15 = (Let (Rec $ Def "a" (Id "b") `Seq` Def "b" two) (If (Id "a") true false))
