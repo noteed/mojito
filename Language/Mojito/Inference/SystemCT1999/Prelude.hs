@@ -2,7 +2,7 @@ module Language.Mojito.Inference.SystemCT1999.Prelude where
 
 import Control.Arrow (second)
 
-import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.SystemCT1999.Context
 import Language.Mojito.Inference.SystemCT1999.Substitution (quantified)
 import Language.Mojito.Prelude.Types

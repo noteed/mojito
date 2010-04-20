@@ -4,6 +4,7 @@ module Language.Mojito.Inference.SystemCT1999.Note where
 -- checking, to be diplayed later.
 
 import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.SystemCT1999.Context
 
 data Note =

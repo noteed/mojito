@@ -2,7 +2,7 @@ module Language.Mojito.Inference.SystemCT1999.Substitution where
 
 import Data.List (intersect, nub, union, (\\))
 
-import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.SystemCT1999.Context
 
 ----------------------------------------------------------------------

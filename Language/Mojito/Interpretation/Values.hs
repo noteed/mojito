@@ -1,6 +1,7 @@
 module Language.Mojito.Interpretation.Values where
 
 import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 
 type Env = [((String, Simple), Val)]
 

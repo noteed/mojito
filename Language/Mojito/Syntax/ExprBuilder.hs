@@ -8,6 +8,7 @@ import Data.List (partition)
 
 import Language.Mojito.Syntax.SExpr
 import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 
 ----------------------------------------------------------------------
 -- S-expressions to Expr.

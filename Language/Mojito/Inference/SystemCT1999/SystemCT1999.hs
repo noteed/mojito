@@ -17,6 +17,7 @@ import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 import Language.Mojito.Syntax.ExprBuilder
 import Language.Mojito.Prelude.Types
 

@@ -4,7 +4,7 @@
 
 module Language.Mojito.Inference.Cardelli.Cardelli where
 
-import Data.List (intersperse, nub, (\\))
+import Data.List (nub, (\\))
 import Control.Monad.State
 
 import qualified Language.Mojito.Syntax.Expr as E

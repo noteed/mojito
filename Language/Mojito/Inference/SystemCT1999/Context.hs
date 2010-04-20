@@ -2,7 +2,7 @@ module Language.Mojito.Inference.SystemCT1999.Context where
 
 import Data.List (union)
 
-import Language.Mojito.Syntax.Expr (Type, showType)
+import Language.Mojito.Syntax.Types (Type, showType)
 
 -- Typing context Gamma.
 -- Each element is a pair (term variable,s) called 'typing'.

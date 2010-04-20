@@ -1,6 +1,6 @@
 module Language.Mojito.Prelude.Types where
 
-import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 
 -- Some base types
 
