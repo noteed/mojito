@@ -8,6 +8,7 @@ import Data.List (nub, (\\))
 import Control.Monad.State
 
 import qualified Language.Mojito.Syntax.Expr as E
+import Language.Mojito.Syntax.Types
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings
@@ -60,12 +61,6 @@ translateDecl d = case d of
 --    Var String
 --  | Op String [Type]
 --  deriving (Show, Eq)
-
-data Simple =
-    TyCon String
-  | TyVar String
-  | TyApp Simple Simple
-  deriving (Show, Eq)
 
 -- Returns the list of type variables in a type.
 vars :: Simple -> [String]
@@ -330,12 +325,6 @@ typeExpr e = (t,s)
 
 infer :: Env -> Expr -> Simple
 infer env e = evalState (analyzeExpr e env []) initialS
-
-showSimple :: Simple -> String
-showSimple t = case t of
-  TyVar a -> a
-  TyCon c -> c
-  TyApp a1 a2 -> "(" ++ showSimple a1 ++ " " ++ showSimple a2 ++ ")"
 
 ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex8, ex9, ex10, ex11, ex12, ex13, ex14 :: Expr
 ex15, ex16, ex17, ex9' :: Expr
