@@ -1,4 +1,4 @@
-module Language.Mojito.Inference.SystemCT1999.Context where
+module Language.Mojito.Inference.Context where
 
 import Data.List (union)
 

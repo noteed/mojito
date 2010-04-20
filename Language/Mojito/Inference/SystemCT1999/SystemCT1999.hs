@@ -21,8 +21,8 @@ import Language.Mojito.Syntax.Types
 import Language.Mojito.Syntax.ExprBuilder
 import Language.Mojito.Prelude.Types
 
-import Language.Mojito.Inference.SystemCT1999.Context
-import Language.Mojito.Inference.SystemCT1999.Substitution
+import Language.Mojito.Inference.Context
+import Language.Mojito.Inference.Substitution
 import Language.Mojito.Inference.SystemCT1999.Note
 
 swap :: (a,b) -> (b,a)

@@ -9,7 +9,7 @@ import Control.Monad.State
 
 import qualified Language.Mojito.Syntax.Expr as E
 import Language.Mojito.Syntax.Types
-import Language.Mojito.Inference.SystemCT1999.Substitution -- TODO Substitution is now common
+import Language.Mojito.Inference.Substitution
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings

@@ -5,7 +5,7 @@ module Language.Mojito.Inference.SystemCT1999.Note where
 
 import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
-import Language.Mojito.Inference.SystemCT1999.Context
+import Language.Mojito.Inference.Context
 
 data Note =
     NString String
