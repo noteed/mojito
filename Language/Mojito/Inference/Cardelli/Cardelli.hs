@@ -4,11 +4,12 @@
 
 module Language.Mojito.Inference.Cardelli.Cardelli where
 
-import Data.List (nub, (\\))
+import Data.List ((\\))
 import Control.Monad.State
 
 import qualified Language.Mojito.Syntax.Expr as E
 import Language.Mojito.Syntax.Types
+import Language.Mojito.Inference.SystemCT1999.Substitution -- TODO Substitution is now common
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings
@@ -62,14 +63,6 @@ translateDecl d = case d of
 --  | Op String [Type]
 --  deriving (Show, Eq)
 
--- Returns the list of type variables in a type.
-vars :: Simple -> [String]
-vars = nub . f
-  where
-    f (TyVar a) = [a]
-    f (TyCon _) = []
-    f (TyApp s1 s2) = f s1 ++ f s2
-
 -- A (type) substitution is a function from type variables to
 -- types that differs from the identity function only on finitely
 -- many variable (definition from Camarao 1999, Type Inference for
@@ -81,7 +74,6 @@ vars = nub . f
 -- Instead of modifying the environment each time a new substitution
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
-type Substitution = [(String,Simple)]
 
 data S = S
   { nextId :: Int
@@ -93,7 +85,7 @@ data S = S
 initialS :: S
 initialS = S
   { nextId = 0
-  , substitution = []
+  , substitution = idSubstitution
 --  , notes = []
   }
 
@@ -114,7 +106,7 @@ compose :: Substitution -> State S ()
 compose ts = do
 --  note ts
   n <- gets substitution
-  modify (\s -> s { substitution = comp ts n })
+  modify (\s -> s { substitution = comp "compose" ts n })
 
 -- Returns a type using the current substitution.
 substitute :: MonadState S m => Simple -> m Simple
@@ -147,36 +139,8 @@ unify (TyCon c1) (TyCon c2) | c1 == c2 = []
 unify (TyApp t1 t2) (TyApp t3 t4) =
   let s1 = unify t1 t3
       s2 = unify (subs s1 t2) (subs s1 t4)
-  in comp s1 s2
+  in comp "unify" s1 s2
 unify t1 t2 = error $ "can't match " ++ show t1 ++ " against " ++ show t2
-
-comp :: Substitution -> Substitution -> Substitution
-comp ts1 ts2 = foldr f ts2 ts1
-  where f t ts = ext (fst t) (snd t) ts
-
-        -- adds a new pair to the substitution, and "performs" it in-place.
-        ext :: String -> Simple -> [(String,Simple)] -> [(String,Simple)]
-        ext t1 t2 ts = case lookup t1 ts of
-          Nothing -> case t2 of
-                       TyApp _ _ -> (t1,t2) : rep t1 t2 ts
-                       TyCon _ -> (t1,t2) : rep t1 t2 ts
-                       TyVar a -> case lookup a ts of
-                                    Nothing -> (t1,t2) : rep t1 t2 ts
-                                    Just t3 -> (t1,t3) : rep t1 t3 ts
-          Just _ -> error $ "comp: " ++ show t1 ++ " is already present in : " ++ show ts ++ " to be replaced by " ++ show t2
-        rep a b cs = let g (x,y) = (x, replace a b `subs` y)
-                     in map g cs
-
--- Apply a substitution to a type.
-subs :: Substitution -> Simple -> Simple
-subs ts (TyApp a1 a2) = TyApp (subs ts a1) (subs ts a2)
-subs ts t@(TyVar a) = maybe t id $ lookup a ts
-subs ts (TyCon c) = TyCon c
-
--- Builds a substitution which replace the first argument
--- by the second.
-replace :: String -> Simple -> Substitution
-replace a t = [(a,t)]
 
 -- Returns the generic variables of a type, i.e. the
 -- variables not in the list of non-generic variables.
