@@ -25,23 +25,101 @@ import Language.Mojito.Inference.Context
 import Language.Mojito.Inference.Substitution
 import Language.Mojito.Inference.Unification
 import Language.Mojito.Inference.SystemCT1999.Note
-
-swap :: (a,b) -> (b,a)
-swap (a,b) = (b,a)
-
-reverseLookup :: Eq a => a -> [(b,a)] -> Maybe b
-reverseLookup k = lookup k . map swap
-
-isLeft :: Either a b -> Bool
-isLeft (Left _) = True
-isLeft _ = False
-
-isRight :: Either a b -> Bool
-isRight (Left _) = False
-isRight _ = True
+import Language.Mojito.Inference.SystemCT1999.Inferencer
+import Language.Mojito.Inference.SystemCT1999.LCG
 
 ----------------------------------------------------------------------
---
+-- main functions
+----------------------------------------------------------------------
+
+-- Infers the typing of an expression in a context. This returns some logs, the state
+-- of the inference and either the typing or an error.
+infer :: [Simple] -> Expr Int -> Context -> ((Either String (Constrained,Context), [Note]), Inferencer)
+infer ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ pp e g) (inferencer { tiTypes = ts })
+
+infer' :: [Simple] -> Expr Int -> Context -> ((Either String (Expr Simple), [Note]), Inferencer)
+infer' ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ go) (inferencer { tiTypes = ts })
+  where go = do (c,g') <- pp e g
+                case kgs c g' of
+                  [] -> throwError "no type."
+                  [t] -> do
+                    ty <- gets tiTypings
+                    s <- gets tiSubstitution
+                    return $ duplicate ty s e t
+                  _ -> throwError "more than one type."
+
+readInferedExpr :: [Simple] -> Context -> String -> Expr Simple
+readInferedExpr ts g str = case readExpr str of
+  Left err -> error err
+  Right e ->
+    case infer' ts e g of
+    ((Left err,_),_) -> error err
+    ((Right e',_),_) -> e'
+
+makeDefaultTypes :: Substitution -> [(Int,(Constrained,Context))] -> [(Int,Simple)]
+makeDefaultTypes s ts = map f ts
+  where f (k,(t,g)) = let (Constrained k' t',g') = (s `subs` t,s `subs'` g)
+                          bigs = satc k' g'
+                      in (k, h $ map (`subs` t') bigs)
+        h [] = error "no type"
+        h [t] = t
+        h tt = error $ "TODO implement some default type mechanism: " ++ concatMap showSimple tt
+
+giveTypes :: Expr Int -> Substitution -> [(Int,(Constrained,Context))] -> Expr [Simple]
+giveTypes e s ts = fmap f e
+  where f k = case lookup k ts of
+                Nothing -> error $ "no typing for node " ++ show k
+                Just (t,g) -> let (Constrained k' t',g') = (s `subs` t,s `subs'` g)
+                                  bigs = satc k' g'
+                              in map (`subs` t') bigs
+
+giveTypes' :: Expr Int -> Substitution -> [(Int, (Constrained, Context))] -> Expr [Simple]
+giveTypes' e s ts = fmap l' e
+  where
+      (ts',ks) = unzip $ map f ts -- mapping i/simple and mapping simple/(constrains,context)
+      f (i,(t,g)) = let Constrained k' t' = s `subs` t
+                        g' = s `subs'` g
+                    in ((i,t'),(t',(k',g')))
+      ks' :: [[(Simple,([Constraint],Context))]]
+      ks' = groupBy ((==) `on` fst) ks -- grouping simple/(constraints,context)
+      h :: [(Simple,([Constraint],Context))] -> (Simple,[Substitution])
+      h xs@((t',_):_) = (t', grp $ unzip $ map snd xs)
+      h _ = error "unexpected"
+      grp (uk,ug) = let ug' = unionContexts ug
+                        uk' = foldl union [] uk
+                    in satc uk' ug'
+      ss = map h ks'
+      l i = do t <- lookup i ts'
+               bigs <- lookup t ss
+               return $ map (`subs` t) bigs
+      l' i = case l i of
+               Nothing -> error "giveTypes'"
+               Just r -> r
+
+inferTypes :: [Simple] -> Context -> String -> Expr [Simple]
+inferTypes ts g str = case readExpr str of
+  Left err -> error err
+  Right e ->
+    case infer ts e g of
+    ((Left err,_),_) -> error err
+    ((Right _,_),i) -> giveTypes e (tiSubstitution i) (tiTypings i)
+
+inferTypes' :: [Simple] -> Context -> String -> Expr [Simple]
+inferTypes' ts g str = case readExpr str of
+  Left err -> error err
+  Right e ->
+    case infer ts e g of
+    ((Left err,_),_) -> error err
+    ((Right _,_),i) -> giveTypes' e (tiSubstitution i) (tiTypings i)
+
+giveDefaultTypes :: Expr [Simple] -> Expr Simple
+giveDefaultTypes e = fmap f e
+  where f [] = error "no type"
+        f [t] = t
+        f tt = error $ "TODO implement some default type mechanism: " ++ concatMap showSimple tt
+
+----------------------------------------------------------------------
+-- system-ct type-inference specific helper functions
 ----------------------------------------------------------------------
 
 ambiguous :: [String] -> [Constraint] -> [String] -> Bool
@@ -55,17 +133,9 @@ unresolved (Constraint o t : k) g = k' `union` unresolved k g
                [s] -> unresolved (subs s k) g
                _ -> [Constraint o t]
 
-rhoc :: Type -> [Type] -> Bool
-rhoc _ [] = True
-rhoc s ss =
-  let t = simple s
-      f s' = null (tv s') && isLeft (unify t $ simple s')
-  in null (tv s) && all f ss
-
--- same than rhoc but with some error reporting
-rhoc' :: MonadError String m => Type -> [Type] -> m ()
-rhoc' _ [] = return ()
-rhoc' s ss = do
+rhoc :: MonadError String m => Type -> [Type] -> m ()
+rhoc _ [] = return ()
+rhoc s ss = do
   let t = simple s
       checkClosed s' = unless (null $ tv s') $ throwError $
         "the previous type " ++ show s' ++ " is not closed."
@@ -100,52 +170,6 @@ satcTest1 = satc ks g
         ks = [Constraint "f" $ TyVar "a" `fun` TyVar "b",
               Constraint "x" $ TyVar "a"]
 
-----------------------------------------------------------------------
---
-----------------------------------------------------------------------
-
-data Inferencer = Inferencer
-  { tiNextId :: Int -- to uniquely name type variables
-  , tiTypes :: [Simple] -- the available (declared) types
-  , tiSubstitution :: Substitution -- the global substitution
-  , tiTypings :: [(Int,(Constrained,Context))] -- the typings for each key
-  }
-
-inferencer :: Inferencer
-inferencer = Inferencer
-  { tiNextId = 0
-  , tiTypes = []
-  , tiSubstitution = idSubstitution
-  , tiTypings = []
-  }
-
-newtype Inf a = Inf { runInf :: ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a }
-  deriving (Functor, Monad, MonadState Inferencer, MonadError String, MonadWriter [Note])
-
--- Infers the typing of an expression in a context. This returns some logs, the state
--- of the inference and either the typing or an error.
-infer :: [Simple] -> Expr Int -> Context -> ((Either String (Constrained,Context), [Note]), Inferencer)
-infer ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ pp e g) (inferencer { tiTypes = ts })
-
-infer' :: [Simple] -> Expr Int -> Context -> ((Either String (Expr Simple), [Note]), Inferencer)
-infer' ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ go) (inferencer { tiTypes = ts })
-  where go = do (c,g') <- pp e g
-                case kgs c g' of
-                  [] -> throwError "no type."
-                  [t] -> do
-                    ty <- gets tiTypings
-                    s <- gets tiSubstitution
-                    return $ duplicate ty s e t
-                  _ -> throwError "more than one type."
-
-readInferedExpr :: [Simple] -> Context -> String -> Expr Simple
-readInferedExpr ts g str = case readExpr str of
-  Left err -> error err
-  Right e ->
-    case infer' ts e g of
-    ((Left err,_),_) -> error err
-    ((Right e',_),_) -> e'
-
 -- Given a constrained type and a context, returns the possible simple types.
 -- FIXME this should make sure all constraints are satisfied ?
 kgs :: Constrained -> Context -> [Simple]
@@ -157,6 +181,11 @@ kgs' ty s k =
   case lookup k ty of
     Nothing -> error "kgs': Should not happen."
     Just (k1,g1) -> kgs (s `subs` k1) (s `subs'` g1)
+
+----------------------------------------------------------------------
+-- 'duplicate' turns each implicitely overloaded symbols into a
+-- definition for each of its types.
+----------------------------------------------------------------------
 
 duplicate :: [(Int, (Constrained, Context))] -> Substitution
   -> Expr Int -> Simple -> Expr Simple
@@ -238,94 +267,17 @@ domForType t ((TyApp (TyCon "->" `TyApp` t2) t'):ts) = case unify t t' of
   Right s -> s `subs` t2
   Left _ -> domForType t ts
 
-makeDefaultTypes :: Substitution -> [(Int,(Constrained,Context))] -> [(Int,Simple)]
-makeDefaultTypes s ts = map f ts
-  where f (k,(t,g)) = let (Constrained k' t',g') = (s `subs` t,s `subs'` g)
-                          bigs = satc k' g'
-                      in (k, h $ map (`subs` t') bigs)
-        h [] = error "no type"
-        h [t] = t
-        h tt = error $ "TODO implement some default type mechanism: " ++ concatMap showSimple tt
+----------------------------------------------------------------------
+--
+----------------------------------------------------------------------
 
-giveTypes :: Expr Int -> Substitution -> [(Int,(Constrained,Context))] -> Expr [Simple]
-giveTypes e s ts = fmap f e
-  where f k = case lookup k ts of
-                Nothing -> error $ "no typing for node " ++ show k
-                Just (t,g) -> let (Constrained k' t',g') = (s `subs` t,s `subs'` g)
-                                  bigs = satc k' g'
-                              in map (`subs` t') bigs
-
-giveTypes' :: Expr Int -> Substitution -> [(Int, (Constrained, Context))] -> Expr [Simple]
-giveTypes' e s ts = fmap l' e
-  where
-      (ts',ks) = unzip $ map f ts -- mapping i/simple and mapping simple/(constrains,context)
-      f (i,(t,g)) = let Constrained k' t' = s `subs` t
-                        g' = s `subs'` g
-                    in ((i,t'),(t',(k',g')))
-      ks' :: [[(Simple,([Constraint],Context))]]
-      ks' = groupBy ((==) `on` fst) ks -- grouping simple/(constraints,context)
-      h :: [(Simple,([Constraint],Context))] -> (Simple,[Substitution])
-      h xs@((t',_):_) = (t', grp $ unzip $ map snd xs)
-      h _ = error "unexpected"
-      grp (uk,ug) = let ug' = unionContexts ug
-                        uk' = foldl union [] uk
-                    in satc uk' ug'
-      ss = map h ks'
-      l i = do t <- lookup i ts'
-               bigs <- lookup t ss
-               return $ map (`subs` t) bigs
-      l' i = case l i of
-               Nothing -> error "giveTypes'"
-               Just r -> r
-
-inferTypes :: [Simple] -> Context -> String -> Expr [Simple]
-inferTypes ts g str = case readExpr str of
-  Left err -> error err
-  Right e ->
-    case infer ts e g of
-    ((Left err,_),_) -> error err
-    ((Right _,_),i) -> giveTypes e (tiSubstitution i) (tiTypings i)
-
-inferTypes' :: [Simple] -> Context -> String -> Expr [Simple]
-inferTypes' ts g str = case readExpr str of
-  Left err -> error err
-  Right e ->
-    case infer ts e g of
-    ((Left err,_),_) -> error err
-    ((Right _,_),i) -> giveTypes' e (tiSubstitution i) (tiTypings i)
-
-giveDefaultTypes :: Expr [Simple] -> Expr Simple
-giveDefaultTypes e = fmap f e
-  where f [] = error "no type"
-        f [t] = t
-        f tt = error $ "TODO implement some default type mechanism: " ++ concatMap showSimple tt
-
-runLcg :: [Type] -> Simple
-runLcg ts =
-  let Right r = fst $ runIdentity $ evalStateT (runWriterT $ runErrorT $ runInf $ lcg ts) inferencer
-  in r
 
 note :: String -> Inf ()
 note m = do
   tell [NString m]
---note _ = return ()
 
 recordType :: Int -> Constrained -> Context -> Inf ()
 recordType k t g = modify (\s -> s { tiTypings = (k,(t,g)) : tiTypings s })
-
--- Creates a unique type or term variable from a string.
-rename :: MonadState Inferencer m => String -> m String
-rename a = do
-  n <- gets tiNextId
-  modify (\s -> s { tiNextId = n + 1 })
-  return (a ++ show n)
-
--- Given a type, returns the constrained type with all the
--- quantified variables renamed with fresh names.
-freshQuantified :: MonadState Inferencer m => Type -> m Constrained
-freshQuantified (Type gs c) = do
-  gs' <- mapM (liftM TyVar . rename) gs
-  return $ subs (fromList $ zip gs gs') c
 
 -- Compose the given substitution with the current substitution.
 compose :: MonadState Inferencer m => String -> Substitution -> m ()
@@ -353,9 +305,6 @@ isTypeInScope t = do
   ts <- gets tiTypes
   return $ (not . null $ filter (isRight . unify t') ts)
            && all (`elem` tc' ts) (tc t)
-
-testIsTypeInScope :: [Simple] -> Simple -> Bool
-testIsTypeInScope ts t = evalState (isTypeInScope t) (inferencer { tiTypes = ts })
 
 -- Checks if the given value constructor is available.
 isConstructorInScope :: MonadState Inferencer m => String -> m Bool
@@ -395,64 +344,6 @@ pt x g = do
 -- term variable substitution on contexts
 tsubs :: String -> String -> Context -> Context
 tsubs x x' gs = Context [if a == x then (x',b) else (a,b) | (a,b) <- ctxAssoc gs]
-
-----------------------------------------------------------------------
--- Least common generalization
-----------------------------------------------------------------------
-
--- Function lcg is implemented along the definition found
--- in ct2.ps.
-lcg :: [Type] -> Inf Simple
-lcg si = do
-  ti <- mapM (liftM smpl . freshQuantified) si
-  (t,_) <- lcg' ti []
---  note $ "lcg(" ++ concat (intersperse ", " $ map showType si) ++ ") = " ++ showSimple t
-  return t
-
-lcg' :: [Simple] -> [(String,(Simple,Simple))] -> Inf (Simple,[(String,(Simple,Simple))])
-lcg' [t] s = return (t,s)
-
-lcg' [t1, t2] s = case reverseLookup (t1,t2) s of
-  Just a -> return (TyVar a,s)
-  Nothing -> if nargs t1 /= nargs t2
-             then do a' <- rename "c"
-                     return (TyVar a', s `dag` [(a', (t1, t2))])
-             else do let (x ,ts ) = cargs t1 -- FIXME why is there always at least one arg ?
-                         (x',ts') = cargs t2
-                     (x0,s0) <- if x == x' then return (x,s)
-                                           else do a <- rename "d"
-                                                   return (TyVar a, s `dag` [(a,(x,x'))])
-                     (ti,si) <- lcgAccum ts ts' s0
-                     return (foldl TyApp x0 ti, si)
-
-lcg' (t1:t2:ts) s = do
-  (t,s0) <- lcg' [t1,t2] s
-  (t',s') <- lcg' ts s0
-  lcg' [t,t'] s'
-lcg' _ _ = error "can't be called"
-
-lcgAccum :: [Simple] -> [Simple] -> [(String, (Simple, Simple))]
-  -> Inf ([Simple], [(String, (Simple, Simple))])
-lcgAccum [] [] s0 = return ([],s0)
-lcgAccum (t1:ts) (t1':ts') s0 = do
-  (t1'',s1) <- lcg' [t1,t1'] s0
-  (ts2,s) <- lcgAccum ts ts' s1
-  return ((t1'' : ts2), s)
-lcgAccum _ _ _ = error $ "lcgAccum: not same length; should not happen"
-
-lcgTest1, lcgTest2, lcgTest3, lcgTest4 :: Simple
-
--- TyApp (TyApp (TyCon "->") (TyCon "int32")) (TyCon "int32")
-lcgTest1 = runLcg [Type [] $ Constrained [] $ int32 `fun` int32]
-
--- TyApp (TyApp (TyCon "->") (TyVar "a0")) (TyVar "a0")
-lcgTest2 = runLcg [Type [] $ Constrained [] $ int32 `fun` int32, Type [] $ Constrained [] $ bool `fun` bool]
-
---TyApp (TyVar "a0") (TyCon "int32")
-lcgTest3 =  runLcg [Type [] $ Constrained [] $ tree int32, Type [] $ Constrained [] $ list int32]
-
--- TyApp (TyVar "a0") (TyVar "a1")
-lcgTest4 = runLcg [Type [] $ Constrained [] $ tree (TyVar "a"), Type [] $ Constrained [] $ list (TyVar "b")]
 
 ----------------------------------------------------------------------
 -- Type inference
@@ -674,7 +565,7 @@ ppAlt g (Alternative p e) = do
 
 letExtend :: MonadError String m => Context -> String -> Type -> m Context
 letExtend g o t = do
-  rhoc' t (g `types` o) `catchError` (\e -> throwError $ "Can't overload " ++ o ++ ": " ++ e)
+  rhoc t (g `types` o) `catchError` (\e -> throwError $ "Can't overload " ++ o ++ ": " ++ e)
   return $ Context $ ctxAssoc g `union` [(o,t)]
 
 lamExtend :: Context -> String -> Type -> Context
@@ -739,207 +630,14 @@ report ts g str =
           in Report str e g t c tgs sub n
 
 ----------------------------------------------------------------------
--- VAR rule
+-- utility code
 ----------------------------------------------------------------------
-{-
-runPt x g = evalState (pp (Id x) g) initialS
 
--- (a0, [(x, a0)])
-runPt0 = runPt "x" []
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
+isLeft _ = False
 
--- (int32, [(x, int32)])
-runPt1 = runPt "x" [("x", typed int32)]
-
--- (z0, [(x, forall z . z)])
-runPt2 = runPt "x" [("x", Type ["z"] $ Constrained [] $ TyVar "z")]
-
--- (z0 int32, [(x, forall z . z int32)])
-runPt3 = runPt "x" [("x", Type ["z"] $ Constrained [] $ TyVar "z" `TyApp` int32)]
-
--- (z0 z0, [(x, forall z . z z)])
-runPt4 = runPt "x" [("x", Type ["z"] $ Constrained [] $ TyVar "z" `TyApp` TyVar "z")]
-
--- (y0 z1, [(x, forall y z . y z)])
-runPt5 = runPt "x" [("x", Type ["y", "z"] $ Constrained [] $ TyVar "y" `TyApp` TyVar "z")]
-
--- ({a : b} . b, [(a, int32), (a, flt32)])
-runPt6 = runPt "x" [("x", typed int32), ("x", typed flt32)]
-
--- ({a : int32 -> b} . int32 -> b, [(a, int32 -> int32), (a, int32 -> flt32)])
--- FIXME I guess it could be simplified, isn't it what later System CT does ?
-runPt7 = runPt "x" [("x", typed $ int32 `fun` int32), ("x", typed $ int32 `fun` flt32)]
--}
-----------------------------------------------------------------------
--- LET rule
-----------------------------------------------------------------------
-{-
-runLet g e = evalState (pp e g) initialS
-
-runLet0 = runLet
-  [("1", typed int32)]
-  (Let (Def "one" (Id "1")) (Id "one"))
-
-runLet1 = runLet
-  [("1", typed int32)]
-  (Let (Def "one" (Id "1"))
-  (Let (Def "one" (Id "1"))
-       (Id "one")))
-
-runLet2 = runLet
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  ]
-  (Let (Def "one" (Id "1"))
-  (Let (Def "one" (Id "1.0"))
-       (Id "one")))
-
-runLet3 = runLet
-  [("1", typed int32)]
-  (Let (Def "one" (Id "1"))
-  (Let (Def "x" (Id "one"))
-       (Id "x")))
-
-runLet4 = runLet
-  [ ("addInt32", typed $ int32 `fun` (int32 `fun` int32))
-  , ("addInt64", typed $ int64 `fun` (int64 `fun` int64))
-  ]
-  (Let (Def "+" (Id "addInt32"))
-  (Let (Def "+" (Id "addInt64"))
-       (Id "+")))
--}
-
-----------------------------------------------------------------------
--- App rule
-----------------------------------------------------------------------
-{-
-runApp :: Context -> Expr Int -> IO ()
-runApp g e = do
-  let ((Right a,_),s) = infer e g
-  putStrLn $ "type: " ++ show a
-  putStrLn $ "substitution: " ++ show (tiSubstitution s)
-
-runApp0, runApp1, runApp2, runApp3, runApp4, runApp5, runApp6,
-  runApp7, runApp8, runApp9, runApp10, runApp11 :: IO ()
-
-runApp0 = runApp
-  [ ("1", typed int32)
-  , ("succ", typed $ int32 `fun` int32)
-  ]
-  (App 0 (Id 1 "succ") (Id 2 "1"))
-
-runApp1 = runApp
-  [ ("succ", typed $ int32 `fun` int32)
-  ]
-  (App 0 (Id 1 "succ") (Id 2 "x"))
-
-runApp2 = runApp
-  [ ("1.0", typed flt32)
-  , ("succ", typed $ int32 `fun` int32)
-  ]
-  (App 0 (Id 1 "succ") (Id 2 "1.0"))
-
-runApp3 = runApp
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("succ", typed $ int32 `fun` int32)
-  ]
-  (Let 0 (Def "one" (Id 1 "1.0"))
-  (Let 2 (Def "one" (Id 3 "1"))
-         (App 4 (Id 5 "succ") (Id 6 "one"))))
-
-runApp4 = -- runApp
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("primAddInt32", typed $ int32 `fun` (int32 `fun` int32))
-  , ("primAddFlt32", typed $ flt32 `fun` (flt32 `fun` flt32))
-  ]
-  "(let (+ primAddInt32)\
-\        (let (+ primAddFlt32)\
-\             (+ 1.0 1.0)))"
-
-runApp5 = -- runApp
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("primAddInt32", typed $ int32 `fun` (int32 `fun` int32))
-  , ("primAddFlt32", typed $ flt32 `fun` (flt32 `fun` flt32))
-  ]
-  "(let (+ primAddInt32)\
-\        (let (+ primAddFlt32)\
-\             +))"
-
-runApp6 = -- runApp
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("fst", typed $ pair (TyVar "a") (TyVar "b") `fun` TyVar "a")
-  , (",", typed $ TyVar "a" `fun` (TyVar "b" `fun` pair (TyVar "a") (TyVar "b")))
-  ]
-  "fst"
-
-runApp7 = -- runApp
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("[]", quantified $ TyVar "i" `fun` list (TyVar "i"))
-  ]
-  "([] 1)"
-
--- (fst (, 1 1.0))  int32
--- (fst             (-> (, int32 flt32) int32)       (-> (, a b) a)
---      (,          (-> int32 flt32 (, int32 flt32)) (-> a b (, a b))
---         1        int32
---           1.0    flt32
---               )) int32
-runApp8 =
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("fst", quantified $ pair (TyVar "a") (TyVar "b") `fun` TyVar "a")
-  , (",", quantified $ TyVar "a" `fun` (TyVar "b" `fun` pair (TyVar "a") (TyVar "b")))
-  ]
-  "(fst (, 1 1.0))"
-
-runApp9 =
-  writeHtmlReport
-  [ ("1", typed int32)
-  ]
-  "(let (id (\\ x x)) (id id 1))"
-
-runApp10 =
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("+", typed $ int32 `fun` (int32 `fun` int32))
-  , ("+", typed $ flt32 `fun` (flt32 `fun` flt32))
-  , (",", quantified $ TyVar "a" `fun` (TyVar "b" `fun` pair (TyVar "a") (TyVar "b")))
-  ]
---  "(\\ x (+ x x))"
-  "(let (double (\\ x (+ x x))) (double 1))"
-
-runApp11 =
-  writeHtmlReport
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("primAddInt32", typed $ int32 `fun` (int32 `fun` int32))
-  , ("primAddFlt32", typed $ flt32 `fun` (flt32 `fun` flt32))
-  ]
-  "(let (+ primAddInt32)\
-\        (let (+ primAddFlt32)\
-\             (let (double (\\ x (+ x x))) (double 1))))"
-
-
-sku10 :: [Constraint]
-sku10 = [Constraint "b1" (int32 `fun` (int32 `fun` int32))]
-g10 :: Context
-g10 =
-  [ ("1", typed int32)
-  , ("1.0", typed flt32)
-  , ("+", typed $ int32 `fun` (int32 `fun` int32))
-  , ("+", typed $ flt32 `fun` (flt32 `fun` flt32))
-  , (",", quantified $ TyVar "a" `fun` (TyVar "b" `fun` pair (TyVar "a") (TyVar "b")))
-  , ("double", Type ["j4"] $ Constrained [Constraint "b1" $ TyVar "j4" `fun` (TyVar "j4" `fun` TyVar "j4")] $ TyVar "j4" `fun` TyVar "j4")
-  ]
--}
-
+isRight :: Either a b -> Bool
+isRight (Left _) = False
+isRight _ = True
 

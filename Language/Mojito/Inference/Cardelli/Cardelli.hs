@@ -44,43 +44,43 @@ unify a b = case U.unify a b of
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
 
-data S = S
-  { nextId :: Int
-  , substitution :: Substitution
+data Inferencer = Inferencer
+  { tiNextId :: Int
+  , tiSubstitution :: Substitution
 --  , notes :: [String]
   }
   deriving Show
 
-initialS :: S
-initialS = S
-  { nextId = 0
-  , substitution = idSubstitution
+inferencer :: Inferencer
+inferencer = Inferencer
+  { tiNextId = 0
+  , tiSubstitution = idSubstitution
 --  , notes = []
   }
 
---note :: MonadState S m => String -> m ()
+--note :: MonadState Inferencer m => String -> m ()
 --note m = modify (\s -> s { notes = m : notes s })
 note :: Monad m => String -> m ()
 note _ = return ()
 
 -- Creates a unique type variable from a string.
-rename :: String -> State S Simple
+rename :: String -> State Inferencer Simple
 rename a = do
-  n <- gets nextId
-  modify (\s -> s { nextId = n + 1 })
+  n <- gets tiNextId
+  modify (\s -> s { tiNextId = n + 1 })
   return (TyVar $ a ++ show n)
 
 -- Compose the given substitution with the current substitution.
-compose :: Substitution -> State S ()
+compose :: Substitution -> State Inferencer ()
 compose ts = do
 --  note ts
-  n <- gets substitution
-  modify (\s -> s { substitution = comp "compose" ts n })
+  n <- gets tiSubstitution
+  modify (\s -> s { tiSubstitution = comp "compose" ts n })
 
 -- Returns a type using the current substitution.
-substitute :: MonadState S m => Simple -> m Simple
+substitute :: MonadState Inferencer m => Simple -> m Simple
 substitute t = do
-  n <- gets substitution
+  n <- gets tiSubstitution
   return (subs n t)
 
 -- A type environment maps type variables to types.
@@ -98,7 +98,7 @@ gvars t ng = vars t \\ ng
 
 -- Given a type, returns the same type with all the
 -- generic variables renamed with fresh names.
-fresh :: Simple -> [String] -> State S Simple
+fresh :: Simple -> [String] -> State Inferencer Simple
 fresh t ng = do
   let gs = gvars t ng
   gs' <- mapM rename gs
@@ -112,7 +112,7 @@ extend s t = (:) (s,t)
 -- Retrieves the type corresponding to an identifier,
 -- giving fresh names to its generic variables, and
 -- applying the current substitution.
-retrieve :: String -> Env -> [String] -> State S Simple
+retrieve :: String -> Env -> [String] -> State Inferencer Simple
 retrieve a tenv ng = case lookup a tenv of
   Nothing -> error $ "unbound type variable " ++ a
   Just t -> do
@@ -161,7 +161,7 @@ initialEnv =
 -- tenv: the type environment
 -- ng: the non-generic variables
 -- typingState: state monad used to perform the typing
-analyzeExpr :: Expr a -> Env -> [String] -> State S Simple
+analyzeExpr :: Expr a -> Env -> [String] -> State Inferencer Simple
 analyzeExpr e env ng = case e of
   Id _ a -> do
     note "Id"
@@ -209,7 +209,7 @@ analyzeExpr e env ng = case e of
   Case _ _ _ -> error "TODO Case"
   HasType _ _ _ -> error "TODO HasType"
 
-analyzeDecl :: Decl a -> Env -> [String] -> State S Env
+analyzeDecl :: Decl a -> Env -> [String] -> State Inferencer Env
 analyzeDecl decl env ng = case decl of
   Def x e1 -> do
     t1 <- analyzeExpr e1 env ng
@@ -223,7 +223,7 @@ analyzeDecl decl env ng = case decl of
     analyzeRec d env' ng'
     return env'
 
-analyzeRecBind :: Decl a -> Env -> [String] -> State S (Env, [String])
+analyzeRecBind :: Decl a -> Env -> [String] -> State Inferencer (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
@@ -235,7 +235,7 @@ analyzeRecBind decl env ng = case decl of
     analyzeRecBind d2 env' ng'
   Rec d -> analyzeRecBind d env ng
 
-analyzeRec :: Decl a -> Env -> [String] -> State S ()
+analyzeRec :: Decl a -> Env -> [String] -> State Inferencer ()
 analyzeRec decl env ng = case decl of
   Def x e1 -> do
     note "Def"
@@ -244,17 +244,17 @@ analyzeRec decl env ng = case decl of
     t1 <- analyzeExpr e1 env ng
     note $ "and will be unified with " ++ show t1
     compose $ unify t t1
-    s <- gets substitution
+    s <- gets tiSubstitution
     note $ "the substitution is now " ++ show s
   Seq d1 d2 -> do
     analyzeRec d1 env ng
     analyzeRec d2 env ng
   Rec d -> analyzeRec d env ng
 
-typeExpr :: Expr a -> (Simple, S)
+typeExpr :: Expr a -> (Simple, Inferencer)
 typeExpr e = (t,s)
-  where (t,s) = runState (analyzeExpr e initialEnv []) initialS
+  where (t,s) = runState (analyzeExpr e initialEnv []) inferencer
 
 infer :: Env -> Expr a -> Simple
-infer env e = evalState (analyzeExpr e env []) initialS
+infer env e = evalState (analyzeExpr e env []) inferencer
 
