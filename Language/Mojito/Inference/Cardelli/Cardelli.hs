@@ -4,7 +4,10 @@
 
 module Language.Mojito.Inference.Cardelli.Cardelli where
 
+import Control.Monad.Identity
 import Control.Monad.State
+import Control.Monad.Error
+import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
@@ -17,6 +20,16 @@ unify :: Simple -> Simple -> Substitution
 unify a b = case U.unify a b of
   Left err -> error err
   Right s -> s
+
+----------------------------------------------------------------------
+-- main functions
+----------------------------------------------------------------------
+
+infer :: Expr a -> Env -> ((Either String Simple, [Note]), Inferencer)
+infer e env = runIdentity $
+  runStateT
+    (runWriterT . runErrorT . runInf $ analyzeExpr e env [])
+    inferencer
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
 -- There is a let construct for polymorphic bindings
@@ -85,7 +98,7 @@ initialEnv =
 -- tenv: the type environment
 -- ng: the non-generic variables
 -- typingState: state monad used to perform the typing
-analyzeExpr :: Expr a -> Env -> [String] -> State Inferencer Simple
+analyzeExpr :: Expr a -> Env -> [String] -> Inf Simple
 analyzeExpr e env ng = case e of
   Id _ a -> do
     note "Id"
@@ -133,7 +146,7 @@ analyzeExpr e env ng = case e of
   Case _ _ _ -> error "TODO Case"
   HasType _ _ _ -> error "TODO HasType"
 
-analyzeDecl :: Decl a -> Env -> [String] -> State Inferencer Env
+analyzeDecl :: Decl a -> Env -> [String] -> Inf Env
 analyzeDecl decl env ng = case decl of
   Def x e1 -> do
     t1 <- analyzeExpr e1 env ng
@@ -147,7 +160,7 @@ analyzeDecl decl env ng = case decl of
     analyzeRec d env' ng'
     return env'
 
-analyzeRecBind :: Decl a -> Env -> [String] -> State Inferencer (Env, [String])
+analyzeRecBind :: Decl a -> Env -> [String] -> Inf (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
@@ -159,7 +172,7 @@ analyzeRecBind decl env ng = case decl of
     analyzeRecBind d2 env' ng'
   Rec d -> analyzeRecBind d env ng
 
-analyzeRec :: Decl a -> Env -> [String] -> State Inferencer ()
+analyzeRec :: Decl a -> Env -> [String] -> Inf ()
 analyzeRec decl env ng = case decl of
   Def x e1 -> do
     note "Def"
@@ -174,11 +187,4 @@ analyzeRec decl env ng = case decl of
     analyzeRec d1 env ng
     analyzeRec d2 env ng
   Rec d -> analyzeRec d env ng
-
-typeExpr :: Expr a -> (Simple, Inferencer)
-typeExpr e = (t,s)
-  where (t,s) = runState (analyzeExpr e initialEnv []) inferencer
-
-infer :: Env -> Expr a -> Simple
-infer env e = evalState (analyzeExpr e env []) inferencer
 

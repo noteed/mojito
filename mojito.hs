@@ -47,7 +47,9 @@ normal = do
     ["--milner", s] -> do
       sexpr <- try "Parse error: " $ parseSExprs' s
       expr <- try "Wrong s-expression: " $ sexprsToExpr sexpr
-      print $ C.infer C.initialEnv expr
+      case C.infer expr C.initialEnv of
+        ((Left err,_),_) -> putStrLn $ "Type-checking failed: " ++ err
+        ((Right typedExpr,_),_) -> print typedExpr
 
     ["--system-ct", s] -> do
       sexpr <- try "Parse error: " $ parseSExprs' s

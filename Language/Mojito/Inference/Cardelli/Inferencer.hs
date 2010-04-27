@@ -1,13 +1,13 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
 module Language.Mojito.Inference.Cardelli.Inferencer where
 
-import Data.List ((\\))
+import Control.Monad.Identity
 import Control.Monad.State
+import Control.Monad.Error
+import Control.Monad.Writer
 
-import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Substitution
-import qualified Language.Mojito.Inference.Unification as U
 import Language.Mojito.Inference.Cardelli.Environment
 
 data Inferencer = Inferencer
@@ -21,23 +21,20 @@ inferencer :: Inferencer
 inferencer = Inferencer
   { tiNextId = 0
   , tiSubstitution = idSubstitution
---  , notes = []
   }
 
---note :: MonadState Inferencer m => String -> m ()
---note m = modify (\s -> s { notes = m : notes s })
-note :: Monad m => String -> m ()
-note _ = return ()
+newtype Inf a = Inf { runInf :: ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a }
+  deriving (Functor, Monad, MonadState Inferencer, MonadError String, MonadWriter [Note])
 
 -- Creates a unique type variable from a string.
-rename :: String -> State Inferencer Simple
+rename :: MonadState Inferencer m => String -> m Simple
 rename a = do
   n <- gets tiNextId
   modify (\s -> s { tiNextId = n + 1 })
   return (TyVar $ a ++ show n)
 
 -- Compose the given substitution with the current substitution.
-compose :: Substitution -> State Inferencer ()
+compose :: MonadState Inferencer m => Substitution -> m ()
 compose ts = do
 --  note ts
   n <- gets tiSubstitution
@@ -51,7 +48,7 @@ substitute t = do
 
 -- Given a type, returns the same type with all the
 -- generic variables renamed with fresh names.
-fresh :: Simple -> [String] -> State Inferencer Simple
+fresh :: MonadState Inferencer m => Simple -> [String] -> m Simple
 fresh t ng = do
   let gs = gvars t ng
   gs' <- mapM rename gs
@@ -60,7 +57,7 @@ fresh t ng = do
 -- Retrieves the type corresponding to an identifier,
 -- giving fresh names to its generic variables, and
 -- applying the current substitution.
-retrieve :: String -> Env -> [String] -> State Inferencer Simple
+retrieve :: String -> Env -> [String] -> Inf Simple
 retrieve a tenv ng = case lookup a tenv of
   Nothing -> error $ "unbound type variable " ++ a
   Just t -> do
@@ -70,4 +67,11 @@ retrieve a tenv ng = case lookup a tenv of
     -- renamed).
     t' <- substitute t
     fresh t' ng
+
+data Note = Note
+
+--note :: MonadState Inferencer m => String -> m ()
+--note m = modify (\s -> s { notes = m : notes s })
+note :: Monad m => String -> m ()
+note _ = return ()
 
