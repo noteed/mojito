@@ -10,8 +10,10 @@ import Test.HUnit
 
 import Language.Mojito.Syntax.SExpr
 import Language.Mojito.Syntax.ExprBuilder
+import qualified Language.Mojito.Inference.Cardelli.Prelude as C
+  (someEnvironment)
 import qualified Language.Mojito.Inference.Cardelli.Cardelli as C
-  (infer, initialEnv)
+  (infer)
 import Language.Mojito.Inference.SystemCT1999.Prelude
 import Language.Mojito.Inference.SystemCT1999.SystemCT1999
 
@@ -47,7 +49,7 @@ normal = do
     ["--milner", s] -> do
       sexpr <- try "Parse error: " $ parseSExprs' s
       expr <- try "Wrong s-expression: " $ sexprsToExpr sexpr
-      case C.infer expr C.initialEnv of
+      case C.infer expr C.someEnvironment of
         ((Left err,_),_) -> putStrLn $ "Type-checking failed: " ++ err
         ((Right typedExpr,_),_) -> print typedExpr
 

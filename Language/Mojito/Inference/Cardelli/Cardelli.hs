@@ -11,15 +11,10 @@ import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
-import Language.Mojito.Inference.Substitution
-import qualified Language.Mojito.Inference.Unification as U
+import Language.Mojito.Prelude.Types
+import Language.Mojito.Inference.Unification
 import Language.Mojito.Inference.Cardelli.Environment
 import Language.Mojito.Inference.Cardelli.Inferencer
-
-unify :: Simple -> Simple -> Substitution
-unify a b = case U.unify a b of
-  Left err -> error err
-  Right s -> s
 
 ----------------------------------------------------------------------
 -- main functions
@@ -59,40 +54,6 @@ infer e env = runIdentity $
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
 
-fun :: Simple -> Simple -> Simple
-fun a b = TyCon "->" `TyApp` a `TyApp` b
-
-bool :: Simple
-bool = TyCon "bool"
-
-int :: Simple
-int = TyCon "int"
-
-pair :: Simple -> Simple -> Simple
-pair a b = TyCon "," `TyApp` a `TyApp` b
-
-u :: a
-u = undefined
-
-true, false, one, two :: Expr a
-true = Id u "true"
-false = Id u "false"
-one = Id u "1"
-two = Id u "2"
-
-initialEnv :: Env
-initialEnv =
-  [ ("true", bool)
-  , ("false", bool)
-  , ("1", int)
-  , ("2", int)
-  , ("mkPair", fun (TyVar "a") (fun (TyVar "b") (pair (TyVar "a") (TyVar "b"))))
-  , ("fst", fun (pair (TyVar "a") (TyVar "b")) (TyVar "a"))
-  , ("snd", fun (pair (TyVar "a") (TyVar "b")) (TyVar "b"))
-  , ("iszero", fun int bool)
-  , ("+", fun int (fun int int))
-  ]
-
 -- analyzeExpr e tenv ng typingState
 -- e: the expression to type
 -- tenv: the type environment
@@ -122,10 +83,12 @@ analyzeExpr e env ng = case e of
     return t
   If _ e1 e2 e3 -> do
     t1 <- analyzeExpr e1 env ng
-    compose $ unify t1 bool
+    s1 <- unify t1 bool
+    compose s1
     t2 <- analyzeExpr e2 env ng
     t3 <- analyzeExpr e3 env ng
-    compose $ unify t2 t3
+    s2 <- unify t2 t3
+    compose s2
     substitute t2
   Fun _ x e2 -> do
     t1@(TyVar v) <- rename x
@@ -137,7 +100,8 @@ analyzeExpr e env ng = case e of
     t1 <- analyzeExpr e1 env ng
     t2 <- analyzeExpr e2 env ng
     t3 <- rename "return"
-    compose $ unify t1 (fun t2 t3)
+    s <- unify t1 (fun t2 t3)
+    compose s
     substitute t3
   Let _ decl e1 -> do
     note "Let"
@@ -180,9 +144,10 @@ analyzeRec decl env ng = case decl of
     note $ x ++ " has type " ++ show t
     t1 <- analyzeExpr e1 env ng
     note $ "and will be unified with " ++ show t1
-    compose $ unify t t1
-    s <- gets tiSubstitution
-    note $ "the substitution is now " ++ show s
+    s1 <- unify t t1
+    compose s1
+    s2 <- gets tiSubstitution
+    note $ "the substitution is now " ++ show s2
   Seq d1 d2 -> do
     analyzeRec d1 env ng
     analyzeRec d2 env ng
