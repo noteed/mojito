@@ -46,14 +46,6 @@ unify a b = case U.unify a b of
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
 
--- Given a type, returns the same type with all the
--- generic variables renamed with fresh names.
-fresh :: Simple -> [String] -> State Inferencer Simple
-fresh t ng = do
-  let gs = gvars t ng
-  gs' <- mapM rename gs
-  return $ subs (zip gs gs') t
-
 fun :: Simple -> Simple -> Simple
 fun a b = TyCon "->" `TyApp` a `TyApp` b
 
