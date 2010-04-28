@@ -293,7 +293,7 @@ substitute' t = do
 isTypeInScope :: MonadState Inferencer m => Simple -> m Bool
 isTypeInScope t = do
   let vs = tv t
-  vs' <- mapM rename (tv t)
+  vs' <- mapM fresh (tv t)
   let t' = subs (fromList $ zip vs vs') t
   ts <- gets tiTypes
   return $ (not . null $ filter (isRight . unify t') ts)
@@ -316,18 +316,18 @@ pt :: String -> Context -> Inf (Constrained,Context)
 pt x g = do
   case g `types` x of
     [] -> do
-      a <- rename "a"
+      a <- fresh "a"
       let a' = Constrained [] a
           ret = (a', Context [(x, Type [] $ a')])
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
       return ret
     [t] -> do
-      c <- freshQuantified t
+      c <- refresh t
       let ret = (c, g)
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
       return ret
     ti -> do
-      TyVar x' <- rename "b"
+      TyVar x' <- fresh "b"
       let g' = tsubs x x' g
       t <- lcg ti
       let ret = (Constrained [Constraint x' t] t, g')
@@ -355,21 +355,21 @@ pp e g =
     return (t1, g1)
 
   FltLit key x -> do
-    (t1, g1) <- do c <- freshQuantified $ typed flt32 -- mimic what pt does
+    (t1, g1) <- do c <- refresh $ typed flt32 -- mimic what pt does
                    return (c, g)
     recordType key t1 g1
     tell [NId key (show x) g (t1, g1)] -- TODO not an Id
     return (t1, g1)
 
   IntLit key x -> do
-    (t1, g1) <- do c <- freshQuantified $ typed int32 -- mimic what pt does
+    (t1, g1) <- do c <- refresh $ typed int32 -- mimic what pt does
                    return (c, g)
     recordType key t1 g1
     tell [NId key (show x) g (t1, g1)] -- TODO not an Id
     return (t1, g1)
 
   StrLit key x -> do
-    (t1, g1) <- do c <- freshQuantified $ typed string -- mimic what pt does
+    (t1, g1) <- do c <- refresh $ typed string -- mimic what pt does
                    return (c, g)
     recordType key t1 g1
     tell [NId key (show x) g (t1, g1)] -- TODO not an Id
@@ -420,7 +420,7 @@ pp e g =
     cgs_ <- mapM (ppAlt g) alts
     Constrained k1_ t1_ <- substitute c1_
     cgs' <- mapM (\(a,b) -> do { a' <- substitute a ; b' <- substitute' b ; return (a',b') }) cgs_
-    a <- rename "l"
+    a <- fresh "l"
     s <- unify' (zip (repeat $ t1_ `fun` a) $ map (smpl . fst) cgs')
     compose "Case" s
     cgs <- mapM (\(a_,b) -> do { a' <- substitute a_ ; b' <- substitute' b ; return (a',b') }) cgs'
@@ -447,7 +447,7 @@ pp e g =
         tell [NFun key u e1 g (ret,g')]
         return (ret, g')
       Nothing -> do
-        a <- TyVar `fmap` rename "i"
+        a <- fresh "i"
         let ret = Constrained k (a `fun` t)
         recordType key ret g'_
         tell [NFun key u e1 g (ret,g'_)]
@@ -456,7 +456,7 @@ pp e g =
 -}
 
   Fun key u e1 -> do
-    t' <- rename "i"
+    t' <- fresh "i"
     let gext = lamExtend g u (typed t')
     (Constrained k t, g'_) <- pp e1 gext
     t'' <- substitute t'
@@ -470,7 +470,7 @@ pp e g =
     (c1_, g1_) <- pp e1 g
     (Constrained k2_ t2, g2_) <- pp e2 g
     Constrained k1_ t1_ <- substitute c1_
-    a <- rename "j"
+    a <- fresh "j"
 --    note $ "_unify " ++ showSimple t1 ++ " " ++ showSimple (t2 `fun` TyVar a) ++ " " ++ show (tv' g)
 --    let s = case _unify t1 (t2 `fun` TyVar a) (tv' g) of
 --    FIXME This should use _unify ('Unify' in the paper) but I don't know exactly what it is.
@@ -543,7 +543,7 @@ ppAlt :: Context -> Alternative Int -> Inf (Constrained,Context)
 ppAlt g (Alternative p e) = do
   let pvs = map fst $ patVars p
       pe = patExpr p
-  ts <- replicateM (length pvs) (rename "k")
+  ts <- replicateM (length pvs) (fresh "k")
   let gext = foldl lamExtend' g (zip pvs (map typed ts))
   (c1_, g1_) <- pp pe gext
   (Constrained k2 t2, g2) <- pp e gext

@@ -54,6 +54,21 @@ infer e env = runIdentity $
 -- is computed, the substitution is applied when an identifer is
 -- looked up (see the function 'retrieve').
 
+-- Retrieves the type corresponding to an identifier,
+-- giving fresh names to its generic variables, and
+-- applying the current substitution.
+-- This function is System CT's pt couterpart.
+retrieve :: String -> Env -> [String] -> Inf Simple
+retrieve a tenv ng = case lookup a tenv of
+  Nothing -> error $ "unbound type variable " ++ a
+  Just t -> do
+    -- the substitution should be applied before renaming
+    -- (a variable v can be renamed into v0 while the
+    -- substitution turns it into bool (which won't be
+    -- renamed).
+    t' <- substitute t
+    refresh t' ng
+
 -- analyzeExpr e tenv ng typingState
 -- e: the expression to type
 -- tenv: the type environment
@@ -91,7 +106,7 @@ analyzeExpr e env ng = case e of
     compose s2
     substitute t2
   Fun _ x e2 -> do
-    t1@(TyVar v) <- rename x
+    t1@(TyVar v) <- fresh x
     let env' = extend x t1 env
         ng' = v : ng
     t2 <- analyzeExpr e2 env' ng'
@@ -99,7 +114,7 @@ analyzeExpr e env ng = case e of
   App _ e1 e2 -> do
     t1 <- analyzeExpr e1 env ng
     t2 <- analyzeExpr e2 env ng
-    t3 <- rename "return"
+    t3 <- fresh "return"
     s <- unify t1 (fun t2 t3)
     compose s
     substitute t3
@@ -128,7 +143,7 @@ analyzeRecBind :: Decl a -> Env -> [String] -> Inf (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
-    t1@(TyVar v) <- rename x
+    t1@(TyVar v) <- fresh x
     note $ x ++ " is renamed " ++ v
     return (extend x t1 env, v : ng)
   Seq d1 d2 -> do

@@ -21,7 +21,7 @@ runLcg ts =
 -- in ct2.ps.
 lcg :: [Type] -> Inf Simple
 lcg si = do
-  ti <- mapM (liftM smpl . freshQuantified) si
+  ti <- mapM (liftM smpl . refresh) si
   (t,_) <- lcg' ti []
 --  note $ "lcg(" ++ concat (intersperse ", " $ map showType si) ++ ") = " ++ showSimple t
   return t
@@ -32,12 +32,12 @@ lcg' [t] s = return (t,s)
 lcg' [t1, t2] s = case reverseLookup (t1,t2) s of
   Just a -> return (TyVar a,s)
   Nothing -> if nargs t1 /= nargs t2
-             then do TyVar a' <- rename "c"
+             then do TyVar a' <- fresh "c"
                      return (TyVar a', s `dag` [(a', (t1, t2))])
              else do let (x ,ts ) = cargs t1 -- FIXME why is there always at least one arg ?
                          (x',ts') = cargs t2
                      (x0,s0) <- if x == x' then return (x,s)
-                                           else do TyVar a <- rename "d"
+                                           else do TyVar a <- fresh "d"
                                                    return (TyVar a, s `dag` [(a,(x,x'))])
                      (ti,si) <- lcgAccum ts ts' s0
                      return (foldl TyApp x0 ti, si)

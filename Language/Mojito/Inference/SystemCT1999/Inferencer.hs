@@ -35,16 +35,16 @@ newtype Inf a = Inf
     MonadError String, MonadWriter [Note])
 
 -- Creates a unique type variable from a string.
-rename :: MonadState Inferencer m => String -> m Simple
-rename a = do
+fresh :: MonadState Inferencer m => String -> m Simple
+fresh a = do
   n <- gets tiNextId
   modify (\s -> s { tiNextId = n + 1 })
   return (TyVar $ a ++ show n)
 
 -- Given a type, returns the constrained type with all the
 -- quantified variables renamed with fresh names.
-freshQuantified :: MonadState Inferencer m => Type -> m Constrained
-freshQuantified (Type gs c) = do
-  gs' <- mapM rename gs
+refresh :: MonadState Inferencer m => Type -> m Constrained
+refresh (Type gs c) = do
+  gs' <- mapM fresh gs
   return $ subs (fromList $ zip gs gs') c
 
