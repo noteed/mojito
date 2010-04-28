@@ -65,7 +65,7 @@ substitute' t = do
   n <- gets tiSubstitution
   return (subs' n t)
 
-note :: String -> Inf ()
+note :: MonadWriter [Note] m => String -> m ()
 note m = do
   tell [NString m]
 

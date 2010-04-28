@@ -63,7 +63,10 @@ substitute t = do
 
 data Note = NString String
 
-note :: MonadWriter [String] m -> m ()
+note :: MonadWriter [Note] m => String -> m ()
 note m = do
   tell [NString m]
+
+recordType :: Int -> Simple -> Inf ()
+recordType k t = modify (\s -> s { tiTypings = (k,t) : tiTypings s })
 
