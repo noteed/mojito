@@ -34,17 +34,17 @@ newtype Inf a = Inf
     (Functor, Monad, MonadState Inferencer,
     MonadError String, MonadWriter [Note])
 
--- Creates a unique type or term variable from a string.
-rename :: MonadState Inferencer m => String -> m String
+-- Creates a unique type variable from a string.
+rename :: MonadState Inferencer m => String -> m Simple
 rename a = do
   n <- gets tiNextId
   modify (\s -> s { tiNextId = n + 1 })
-  return (a ++ show n)
+  return (TyVar $ a ++ show n)
 
 -- Given a type, returns the constrained type with all the
 -- quantified variables renamed with fresh names.
 freshQuantified :: MonadState Inferencer m => Type -> m Constrained
 freshQuantified (Type gs c) = do
-  gs' <- mapM (liftM TyVar . rename) gs
+  gs' <- mapM rename gs
   return $ subs (fromList $ zip gs gs') c
 

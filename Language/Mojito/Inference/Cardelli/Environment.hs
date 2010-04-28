@@ -2,12 +2,9 @@
 module Language.Mojito.Inference.Cardelli.Environment where
 
 import Data.List ((\\))
-import Control.Monad.State
 
-import Language.Mojito.Syntax.Expr
 import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Substitution
-import qualified Language.Mojito.Inference.Unification as U
 
 -- A type environment maps type variables to types.
 -- An association list should be enough but to allow

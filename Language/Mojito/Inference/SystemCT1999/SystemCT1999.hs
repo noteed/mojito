@@ -293,7 +293,7 @@ substitute' t = do
 isTypeInScope :: MonadState Inferencer m => Simple -> m Bool
 isTypeInScope t = do
   let vs = tv t
-  vs' <- mapM (liftM TyVar . rename) (tv t)
+  vs' <- mapM rename (tv t)
   let t' = subs (fromList $ zip vs vs') t
   ts <- gets tiTypes
   return $ (not . null $ filter (isRight . unify t') ts)
@@ -317,7 +317,7 @@ pt x g = do
   case g `types` x of
     [] -> do
       a <- rename "a"
-      let a' = Constrained [] (TyVar a)
+      let a' = Constrained [] a
           ret = (a', Context [(x, Type [] $ a')])
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
       return ret
@@ -327,7 +327,7 @@ pt x g = do
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
       return ret
     ti -> do
-      x' <- rename "b"
+      TyVar x' <- rename "b"
       let g' = tsubs x x' g
       t <- lcg ti
       let ret = (Constrained [Constraint x' t] t, g')
@@ -421,12 +421,12 @@ pp e g =
     Constrained k1_ t1_ <- substitute c1_
     cgs' <- mapM (\(a,b) -> do { a' <- substitute a ; b' <- substitute' b ; return (a',b') }) cgs_
     a <- rename "l"
-    s <- unify' (zip (repeat $ t1_ `fun` TyVar a) $ map (smpl . fst) cgs')
+    s <- unify' (zip (repeat $ t1_ `fun` a) $ map (smpl . fst) cgs')
     compose "Case" s
     cgs <- mapM (\(a_,b) -> do { a' <- substitute a_ ; b' <- substitute' b ; return (a',b') }) cgs'
     g1 <- substitute' g1_
     k1 <- substitute k1_
-    ty <- substitute (TyVar a)
+    ty <- substitute a
     let uk = foldl (\b (c,_) -> b `union` cstr c) [] cgs
         ug = Context $ foldl (\ c (_,b) -> c `union` ctxAssoc b) [] cgs
     let c = combine "Case" g (k1 `union` uk) (unionContexts [g1, ug]) ty
@@ -456,7 +456,7 @@ pp e g =
 -}
 
   Fun key u e1 -> do
-    t' <- fmap TyVar $ rename "i"
+    t' <- rename "i"
     let gext = lamExtend g u (typed t')
     (Constrained k t, g'_) <- pp e1 gext
     t'' <- substitute t'
@@ -474,13 +474,13 @@ pp e g =
 --    note $ "_unify " ++ showSimple t1 ++ " " ++ showSimple (t2 `fun` TyVar a) ++ " " ++ show (tv' g)
 --    let s = case _unify t1 (t2 `fun` TyVar a) (tv' g) of
 --    FIXME This should use _unify ('Unify' in the paper) but I don't know exactly what it is.
-    s <- unify t1_ (t2 `fun` TyVar a)
+    s <- unify t1_ (t2 `fun` a)
     compose "App" s
     k1 <- substitute k1_
     g1 <- substitute' g1_
     k2 <- substitute k2_
     g2 <- substitute' g2_
-    ty <- substitute (TyVar a)
+    ty <- substitute a
 
     let c = combine "App2" g (k1 `union` k2) (unionContexts [g1, g2]) ty
     case c of
@@ -543,7 +543,7 @@ ppAlt :: Context -> Alternative Int -> Inf (Constrained,Context)
 ppAlt g (Alternative p e) = do
   let pvs = map fst $ patVars p
       pe = patExpr p
-  ts <- replicateM (length pvs) (fmap TyVar $ rename "k")
+  ts <- replicateM (length pvs) (rename "k")
   let gext = foldl lamExtend' g (zip pvs (map typed ts))
   (c1_, g1_) <- pp pe gext
   (Constrained k2 t2, g2) <- pp e gext
