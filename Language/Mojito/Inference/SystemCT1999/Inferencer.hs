@@ -7,7 +7,6 @@ import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Types
-
 import Language.Mojito.Inference.Context
 import Language.Mojito.Inference.Substitution
 import Language.Mojito.Inference.SystemCT1999.Note
@@ -27,8 +26,13 @@ inferencer = Inferencer
   , tiTypings = []
   }
 
-newtype Inf a = Inf { runInf :: ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a }
-  deriving (Functor, Monad, MonadState Inferencer, MonadError String, MonadWriter [Note])
+newtype Inf a = Inf
+  { runInf ::
+    ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a
+  }
+  deriving
+    (Functor, Monad, MonadState Inferencer,
+    MonadError String, MonadWriter [Note])
 
 -- Creates a unique type or term variable from a string.
 rename :: MonadState Inferencer m => String -> m String

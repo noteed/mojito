@@ -56,9 +56,11 @@ normal = do
     ["--system-ct", s] -> do
       sexpr <- try "Parse error: " $ parseSExprs' s
       expr <- try "Wrong s-expression: " $ sexprsToExpr sexpr
-      case infer' someTypes expr someContext of
+      case infer someTypes expr someContext of
         ((Left err,_),_) -> putStrLn $ "Type-checking failed: " ++ err
-        ((Right typedExpr,_),_) -> print $ pPrint typedExpr
+        ((Right (c,g),_),inf) -> do
+          typedExpr <- try "wrong final type: " $ duplicate' inf expr c g
+          print $ pPrint typedExpr
 
     _ -> putStrLn "Unrecognized arguments." >> usage
 

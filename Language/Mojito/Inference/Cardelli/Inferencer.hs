@@ -11,20 +11,28 @@ import Language.Mojito.Inference.Substitution
 import Language.Mojito.Inference.Cardelli.Environment
 
 data Inferencer = Inferencer
-  { tiNextId :: Int
-  , tiSubstitution :: Substitution
---  , notes :: [String]
+  { tiNextId :: Int -- to uniquely name type variables
+  , tiTypes :: [Simple] -- the available (declared) types
+  , tiSubstitution :: Substitution -- the global substitution
+  , tiTypings :: [(Int,Simple)] -- the typings for each key
   }
   deriving Show
 
 inferencer :: Inferencer
 inferencer = Inferencer
   { tiNextId = 0
+  , tiTypes = []
   , tiSubstitution = idSubstitution
+  , tiTypings = []
   }
 
-newtype Inf a = Inf { runInf :: ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a }
-  deriving (Functor, Monad, MonadState Inferencer, MonadError String, MonadWriter [Note])
+newtype Inf a = Inf
+  { runInf ::
+    ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a
+  }
+  deriving
+    (Functor, Monad, MonadState Inferencer,
+    MonadError String, MonadWriter [Note])
 
 -- Creates a unique type variable from a string.
 rename :: MonadState Inferencer m => String -> m Simple
