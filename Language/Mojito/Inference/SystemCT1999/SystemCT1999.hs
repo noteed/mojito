@@ -264,31 +264,6 @@ domForType t ((TyApp (TyCon "->" `TyApp` t2) t'):ts) = case unify t t' of
 --
 ----------------------------------------------------------------------
 
-
-note :: String -> Inf ()
-note m = do
-  tell [NString m]
-
-recordType :: Int -> Constrained -> Context -> Inf ()
-recordType k t g = modify (\s -> s { tiTypings = (k,(t,g)) : tiTypings s })
-
--- Compose the given substitution with the current substitution.
-compose :: MonadState Inferencer m => String -> Substitution -> m ()
-compose msg ts = do
-   n <- gets tiSubstitution
-   modify (\s -> s { tiSubstitution = comp msg ts n })
-
--- Returns a type using the current substitution.
-substitute :: (MonadState Inferencer m, Subs a) => a ->  m a
-substitute t = do
-  n <- gets tiSubstitution
-  return (subs n t)
-
-substitute' :: MonadState Inferencer m => Context ->  m Context
-substitute' t = do
-  n <- gets tiSubstitution
-  return (subs' n t)
-
 -- Checks if the given type is available.
 isTypeInScope :: MonadState Inferencer m => Simple -> m Bool
 isTypeInScope t = do

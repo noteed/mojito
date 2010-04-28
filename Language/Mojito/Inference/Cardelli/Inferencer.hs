@@ -41,10 +41,17 @@ fresh a = do
   modify (\s -> s { tiNextId = n + 1 })
   return (TyVar $ a ++ show n)
 
+-- Given a type, returns the same type with all the
+-- generic variables renamed with fresh names.
+refresh :: MonadState Inferencer m => Simple -> [String] -> m Simple
+refresh t ng = do
+  let gs = gvars t ng
+  gs' <- mapM fresh gs
+  return $ subs (fromList $ zip gs gs') t
+
 -- Compose the given substitution with the current substitution.
 compose :: MonadState Inferencer m => Substitution -> m ()
 compose ts = do
---  note ts
   n <- gets tiSubstitution
   modify (\s -> s { tiSubstitution = comp "compose" ts n })
 
@@ -54,18 +61,9 @@ substitute t = do
   n <- gets tiSubstitution
   return (subs n t)
 
--- Given a type, returns the same type with all the
--- generic variables renamed with fresh names.
-refresh :: MonadState Inferencer m => Simple -> [String] -> m Simple
-refresh t ng = do
-  let gs = gvars t ng
-  gs' <- mapM fresh gs
-  return $ subs (fromList $ zip gs gs') t
+data Note = NString String
 
-data Note = Note
-
---note :: MonadState Inferencer m => String -> m ()
---note m = modify (\s -> s { notes = m : notes s })
-note :: Monad m => String -> m ()
-note _ = return ()
+note :: MonadWriter [String] m -> m ()
+note m = do
+  tell [NString m]
 
