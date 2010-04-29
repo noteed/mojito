@@ -28,3 +28,32 @@ executable mojito
                        -prof
                        -auto-all
 
+library
+  build-depends:       base >= 4 && < 5,
+                       parsec, pretty, prettyclass,
+                       network, fastcgi,
+                       monads-fd, transformers,
+                       array, containers,
+                       xhtml,
+                       time, datetime,
+                       HUnit
+  ghc-options:         -Wall
+                       -O2
+                       -prof
+                       -auto-all
+  exposed-modules:     Language.Mojito.Inference.Cardelli.Cardelli,
+                       Language.Mojito.Inference.SystemCT1999.Inferencer,
+                       Language.Mojito.Inference.SystemCT1999.LCG,
+                       Language.Mojito.Inference.SystemCT1999.Note,
+                       Language.Mojito.Inference.SystemCT1999.Prelude,
+                       Language.Mojito.Inference.SystemCT1999.SystemCT1999,
+                       Language.Mojito.Inference.SystemCT1999.SystemCT1999Html,
+                       Language.Mojito.Inference.Context,
+                       Language.Mojito.Inference.Substitution,
+                       Language.Mojito.Inference.Unification,
+                       Language.Mojito.Prelude.Types,
+                       Language.Mojito.Syntax.Expr,
+                       Language.Mojito.Syntax.ExprBuilder,
+                       Language.Mojito.Syntax.SExpr,
+                       Language.Mojito.Syntax.Types
+

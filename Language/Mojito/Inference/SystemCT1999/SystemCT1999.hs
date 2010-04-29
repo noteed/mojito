@@ -37,6 +37,27 @@ import Language.Mojito.Inference.SystemCT1999.LCG
 infer :: [Simple] -> Expr Int -> Context -> ((Either String (Constrained,Context), [Note]), Inferencer)
 infer ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ pp e g) (inferencer { tiTypes = ts })
 
+-- TODO use infer + duplicate' instead
+infer' :: [Simple] -> Expr Int -> Context -> ((Either String (Expr Simple), [Note]), Inferencer)
+infer' ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ go) (inferencer { tiTypes = ts })
+  where go = do (c,g') <- pp e g
+                case kgs c g' of
+                  [] -> throwError "no type."
+                  [t] -> do
+                    ty <- gets tiTypings
+                    s <- gets tiSubstitution
+                    return $ duplicate ty s e t
+                  _ -> throwError "more than one type."
+
+-- TODO delete this function or put it in some helper module
+readInferedExpr :: [Simple] -> Context -> String -> Expr Simple
+readInferedExpr ts g str = case readExpr str of
+  Left err -> error err
+  Right e ->
+    case infer' ts e g of
+    ((Left err,_),_) -> error err
+    ((Right e',_),_) -> e'
+
 duplicate' :: MonadError String m =>
   Inferencer -> Expr Int -> Constrained -> Context
   -> m (Expr Simple)

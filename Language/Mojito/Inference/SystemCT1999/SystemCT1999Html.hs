@@ -5,6 +5,7 @@ import Data.List (intersperse)
 import Text.XHtml.Strict
 
 import Language.Mojito.Syntax.Expr
+import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Context
 import Language.Mojito.Inference.Substitution (subs, showSubstitution)
 import Language.Mojito.Inference.SystemCT1999.Note
