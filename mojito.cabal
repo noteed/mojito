@@ -44,6 +44,8 @@ library
   exposed-modules:     Language.Mojito.Inference.Cardelli.Cardelli,
                        Language.Mojito.Inference.SystemCT1999.Inferencer,
                        Language.Mojito.Inference.SystemCT1999.LCG,
+                       Language.Mojito.Inference.SystemCT1999.Narrative,
+                       Language.Mojito.Inference.SystemCT1999.NarrativeHtml,
                        Language.Mojito.Inference.SystemCT1999.Note,
                        Language.Mojito.Inference.SystemCT1999.Prelude,
                        Language.Mojito.Inference.SystemCT1999.SystemCT1999,
