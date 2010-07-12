@@ -74,6 +74,7 @@ empty = try $ do
   _ <- char '['
   spaces
   _ <- char ']'
+  spaces
   return $ Sym "[]"
 
 str :: GenParser Char st Tree
