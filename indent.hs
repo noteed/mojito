@@ -9,7 +9,7 @@ import System.IO.UTF8 (readFile)
 
 import Text.Syntactical
 import Text.Syntactical.String
-import Language.Mojito.Syntax.Indent (strides, flatten)
+import Language.Mojito.Syntax.Indent (strides')
 
 table0 :: Table String
 table0 = buildTable
@@ -61,23 +61,23 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["-i", s] -> case strides s of
-      Right a -> putStrLn . unwords $ flatten a []
+    ["-i", s] -> case strides' "{" "}" ";" s of
+      Right a -> putStrLn $ unwords a
       Left err -> putStrLn $ "indentation error: " ++ show err
     ["-fi", fn] -> do
       s <- readFile fn
-      case strides s of
-        Right a -> putStrLn . unwords $ flatten a []
+      case strides' "{" "}" ";" s of
+        Right a -> putStrLn $ unwords a
         Left err -> putStrLn $ "indentation error: " ++ show err
     ["-f", fn] -> do
       s <- readFile fn
-      case strides s of
-        Right ts -> case shunt table0 . map Atom $ flatten ts [] of
+      case strides' "{" "}" ";" s of
+        Right a -> case shunt table0 . map Atom $ a of
           Right e -> putStrLn $ showSExpr e
           Left f -> putStrLn $ showFailure f
         Left err -> putStrLn $ "indentation error: " ++ show err
-    [s] -> case strides s of
-      Right ts -> case shunt table0 . map Atom $ flatten ts [] of
+    [s] -> case strides' "{" "}" ";" s of
+      Right a -> case shunt table0 . map Atom $ a of
         Right e -> putStrLn $ showSExpr e
         Left f -> putStrLn $ showFailure f
       Left err -> putStrLn $ "indentation error: " ++ show err
