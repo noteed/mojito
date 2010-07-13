@@ -31,9 +31,17 @@ instance IsString MyToken where
 
 instance Token MyToken where
   toString (MyToken _ t) = t
-  operator pt = Atom . MyToken Internal . concat . map toString $
-    previousPart pt ++ [partSymbol pt]
+  operator = myOperator
   consider (MyToken _ a) (MyToken _ b) = a == b
+
+myOperator pt as =
+  if pts == "()"
+  then case as of
+    [List (Atom (MyToken Internal ","):as')] ->
+      List $ (Atom $ MyToken Internal "(,)"):as'
+    _ -> List $ (Atom $ MyToken Internal pts):as
+  else List $ (Atom $ MyToken Internal pts):as
+  where pts = concatMap toString $ previousPart pt ++ [partSymbol pt]
 
 ----------------------------------------------------------------------
 -- The operator table for Syntactical
