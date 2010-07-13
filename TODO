@@ -1,0 +1,5 @@
+- Compare Cardelli.hs and SystemCT1999.hs to make them more similar.
+  - Move duplicate out of SystemCT1999.hs. 
+- Add tests.
+- Add benchmarks.
+- Make SystemCT faster (to be able to run on (mulm mat4x4 mat4x4) quickly).
