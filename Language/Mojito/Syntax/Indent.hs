@@ -88,39 +88,45 @@ str = try $ do
   spaces
   return $ Sym ('"' : x ++ "\"")
 
--- Parse the string s then a block that starts on the same line
--- or on the same or grater column.
-indent :: String -> GenParser Char st Tree
-indent s = try $ do
+-- Parse one of the given strings then a block that starts on the
+-- same line or on the same or grater column.
+indent :: [String] -> GenParser Char st Tree
+indent intro = try $ do
   (l1,c1) <- getPos
-  string s >> spaces
+  s <- choice (map string intro)
+  spaces
   (l2,c2) <- getPos
   unless (c1 <= c2 || l1 == l2) pzero
-  b <- block
+  b <- block intro
   return $ Block s b
 
--- Parse a single (possibly nested) symbol.
-tree :: GenParser Char st Tree
-tree = str <|> empty <|> sym
-  <|> indent "let" <|> indent "where" <|> indent "of"
+-- Parse a single (possibly nested) symbol, where the nesting can be
+-- introduced by one of the given tokens.
+tree :: [String] -> GenParser Char st Tree
+tree intro = str <|> empty <|> sym <|> indent intro
 
--- Parse a continued list of (possibly nested) symbols.
-stride :: GenParser Char st Stride
-stride = getPos >>= many1 . flip continue tree >>= return . Stride
+-- Parse a continued list of (possibly nested) symbols, where the
+-- nesting can be introduced by one of the given tokens.
+stride :: [String] -> GenParser Char st Stride
+stride intro =
+  getPos >>= many1 . flip continue (tree intro) >>= return . Stride
 
--- Parse a non-empty sequence of verticaly-aligned strides.
-block :: GenParser Char st [Stride]
-block = aligned stride
+-- Parse a non-empty sequence of verticaly-aligned strides. Nested
+-- blocks can be introduce by one of the given tokens.
+block :: [String] -> GenParser Char st [Stride]
+block intro = aligned (stride intro)
 
--- The top-level parser to parse a non-empty sequence of
--- strides.
-strides :: String -> Either ParseError [Stride]
-strides = parse (spaces >> block) "strides"
+-- The top-level parser to parse a non-empty sequence of strides.
+-- Nested blocks can be introduce by one of the given tokens.
+strides' :: [String] -> String -> Either ParseError [Stride]
+strides' intro = parse (spaces >> block intro) "strides"
 
 -- The top-level parser to parse a non-empty sequence of
 -- strides and return them already flattened, using the indent,
 -- dedent, and sequence tokens i, d and sq.
-strides' :: String -> String -> String -> String -> Either ParseError [String]
-strides' i d sq =
-  parse (spaces >> fmap (flip (flatten i d sq) []) block) "strides"
+-- Nested blocks can be introduce by one of the given tokens.
+strides :: [String] -> String -> String -> String ->
+  String -> Either ParseError [String]
+strides intro i d sq =
+  parse (spaces >> fmap (flip (flatten i d sq) []) (block intro)) "strides"
 

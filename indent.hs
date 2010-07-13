@@ -9,7 +9,7 @@ import System.IO.UTF8 (readFile)
 
 import Text.Syntactical
 import Text.Syntactical.String
-import Language.Mojito.Syntax.Indent (strides')
+import Language.Mojito.Syntax.Indent (strides)
 
 table0 :: Table String
 table0 = buildTable
@@ -57,26 +57,28 @@ table0 = buildTable
    ]
  ]
 
+tokenize = strides (words "let where of") "{" "}" ";"
+
 main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["-i", s] -> case strides' "{" "}" ";" s of
+    ["-i", s] -> case tokenize s of
       Right a -> putStrLn $ unwords a
       Left err -> putStrLn $ "indentation error: " ++ show err
     ["-fi", fn] -> do
       s <- readFile fn
-      case strides' "{" "}" ";" s of
+      case tokenize s of
         Right a -> putStrLn $ unwords a
         Left err -> putStrLn $ "indentation error: " ++ show err
     ["-f", fn] -> do
       s <- readFile fn
-      case strides' "{" "}" ";" s of
+      case tokenize s of
         Right a -> case shunt table0 . map Atom $ a of
           Right e -> putStrLn $ showSExpr e
           Left f -> putStrLn $ showFailure f
         Left err -> putStrLn $ "indentation error: " ++ show err
-    [s] -> case strides' "{" "}" ";" s of
+    [s] -> case tokenize s of
       Right a -> case shunt table0 . map Atom $ a of
         Right e -> putStrLn $ showSExpr e
         Left f -> putStrLn $ showFailure f
