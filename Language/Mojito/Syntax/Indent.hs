@@ -8,18 +8,18 @@ import Text.ParserCombinators.Parsec
 import Control.Monad (unless)
 
 -- A tree data structure to represent indentation.
-data Tree =
-    Sym String
-  | Block String [Stride] -- Block s ss represents an indented block
+data Tree a =
+    Sym a
+  | Block a [Stride a] -- Block s ss represents an indented block
                        -- introduced by the string s.
   deriving Show
 
-newtype Stride = Stride [Tree]
+newtype Stride a = Stride [Tree a]
   deriving Show
 
 -- Flatten a list of strides (that is a block) into a list of
 -- token, introducing indent, dedent, and sequence tokens.
-flatten :: String -> String -> String -> [Stride] -> [String] -> [String]
+flatten :: a -> a -> a -> [Stride a] -> [a] -> [a]
 flatten i d sq = symStrides
   where
     symStrides [s] = symStride s
@@ -65,10 +65,10 @@ aligned p = do
 
 -- Parse one of the given strings then a block that starts on the
 -- same line or on the same or grater column.
-indent :: P Tree -> [String] -> P Tree
+indent :: P (Tree a) -> P a -> P (Tree a)
 indent atom intro = try $ do
   (l1,c1) <- getPos
-  s <- choice (map string intro)
+  s <- intro
   spaces
   (l2,c2) <- getPos
   unless (c1 <= c2 || l1 == l2) pzero
@@ -77,31 +77,31 @@ indent atom intro = try $ do
 
 -- Parse a single (possibly nested) symbol, where the nesting can be
 -- introduced by one of the given tokens.
-tree :: P Tree -> [String] -> P Tree
+tree :: P (Tree a) -> P a -> P (Tree a)
 tree atom intro = atom <|> indent atom intro
 
 -- Parse a continued list of (possibly nested) symbols, where the
 -- nesting can be introduced by one of the given tokens.
-stride :: P Tree -> [String] -> P Stride
+stride :: P (Tree a) -> P a -> P (Stride a)
 stride atom intro =
   getPos >>= many1 . flip continue (tree atom intro) >>= return . Stride
 
 -- Parse a non-empty sequence of verticaly-aligned strides. Nested
 -- blocks can be introduce by one of the given tokens.
-block :: P Tree -> [String] -> P [Stride]
+block :: P (Tree a) -> P a -> P [Stride a]
 block atom intro = aligned (stride atom intro)
 
 -- The top-level parser to parse a non-empty sequence of strides.
 -- Nested blocks can be introduce by one of the given tokens.
-strides' :: P Tree -> [String] -> String -> Either ParseError [Stride]
+strides' :: P (Tree a) -> P a -> String -> Either ParseError [Stride a]
 strides' atom intro = parse (spaces >> block atom intro) "strides"
 
 -- The top-level parser to parse a non-empty sequence of
 -- strides and return them already flattened, using the indent,
 -- dedent, and sequence tokens i, d and sq.
 -- Nested blocks can be introduce by one of the given tokens.
-strides :: P Tree -> [String] -> String -> String -> String ->
-  String -> Either ParseError [String]
+strides :: P (Tree a) -> P a -> a -> a -> a ->
+  String -> Either ParseError [a]
 strides atom intro i d sq = flip parse "strides" $
   spaces >> fmap (flip (flatten i d sq) []) (block atom intro)
 
