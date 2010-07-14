@@ -93,8 +93,8 @@ block atom intro = aligned (stride atom intro)
 
 -- The top-level parser to parse a non-empty sequence of strides.
 -- Nested blocks can be introduce by one of the given tokens.
-strides' :: P (Tree a) -> P a -> String -> Either ParseError [Stride a]
-strides' atom intro = parse (spaces >> block atom intro) "strides"
+strides_ :: P (Tree a) -> P a -> String -> Either ParseError [Stride a]
+strides_ atom intro = parse (spaces >> block atom intro) "strides"
 
 -- The top-level parser to parse a non-empty sequence of
 -- strides and return them already flattened, using the indent,
@@ -104,5 +104,11 @@ strides :: P (Tree a) -> P a -> a -> a -> a ->
   String -> Either ParseError [a]
 strides atom intro i d sq = flip parse "strides" $
   spaces >> fmap (flip (flatten i d sq) []) (block atom intro)
+
+-- Same as above but wrap the result in the indent/dedent tokens.
+strides' :: P (Tree a) -> P a -> a -> a -> a ->
+  String -> Either ParseError [a]
+strides' atom intro i d sq = flip parse "strides" $
+  spaces >> fmap ((i:) . flip (flatten i d sq) [d]) (block atom intro)
 
 

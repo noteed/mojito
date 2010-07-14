@@ -14,7 +14,7 @@ import GHC.Exts (IsString(..))
 import Text.Syntactical
 import qualified Text.Syntactical as S
 import Text.Syntactical.String
-import Language.Mojito.Syntax.Indent (Tree(..), strides)
+import Language.Mojito.Syntax.Indent (Tree(..), strides')
 
 
 ----------------------------------------------------------------------
@@ -34,14 +34,27 @@ instance Token MyToken where
   operator = myOperator
   consider (MyToken _ a) (MyToken _ b) = a == b
 
-myOperator pt as =
-  if pts == "()"
-  then case as of
-    [List (Atom (MyToken Internal ","):as')] ->
-      List $ (Atom $ MyToken Internal "(,)"):as'
-    _ -> List $ (Atom $ MyToken Internal pts):as
-  else List $ (Atom $ MyToken Internal pts):as
+-- Rewrite the sub-expressions as we apply the operator.
+myOperator pt as = case pts of
+  "()" -> case as of
+    [List [Atom (MyToken Internal ","),a,b]] ->
+      tuple [] (head as)
+    [as'] -> as'
+  "[]" -> case as of
+    [as'] -> list "," [Atom (MyToken Internal "list")] as'
+  "{}" -> case as of
+    [as'] -> list ";" [Atom (MyToken Internal "declarations")] as'
+  "``" -> case as of
+    [a,b,c] -> List [b,a,c]
+  _ -> List $ (Atom $ MyToken Internal pts):as
   where pts = concatMap toString $ previousPart pt ++ [partSymbol pt]
+
+tuple xs (List [Atom (MyToken Internal ","),a,b]) = tuple (a:xs) b
+tuple xs b = List (a : reverse (b:xs))
+  where a = Atom (MyToken Internal $ ',' : show (length xs + 1))
+
+list c xs (List [Atom (MyToken Internal c'),a,b]) | c == c' = list c (a:xs) b
+list _ xs b = List (reverse (b:xs))
 
 ----------------------------------------------------------------------
 -- The operator table for Syntactical
@@ -72,6 +85,8 @@ table0 = buildTable
  , [ infx LeftAssociative "<<"
    , infx LeftAssociative ">>"
    , infx RightAssociative "?" `distfix` ":"
+   ]
+ , [ infx LeftAssociative "`" `distfix` "`"
    ]
  , [ prefx "if" `distfix` "then" `distfix` "else"
    ]
@@ -111,15 +126,15 @@ keywords :: [String]
 keywords = words "let where of"
 
 -- Parse a symbol. A symbol is any consecutive list of non-blank
--- characters except for ,()⟨⟩[], which are each a single symbol.
+-- characters except for `,()⟨⟩[], which are each a single symbol.
 sym :: P (Tree MyToken)
 sym = try $ do
   src <- source
   x <- noneOf "\t\n "
-  if x `elem` ",()⟨⟩[]"
+  if x `elem` "`,()⟨⟩[]"
     then spaces >> return (Sym $ MyToken src [x])
     else do
-      xs <- manyTill anyChar (lookAhead $ (oneOf ",()⟨⟩[]\t\n " >> return ()) <|> eof)
+      xs <- manyTill anyChar (lookAhead $ (oneOf "`,()⟨⟩[]\t\n " >> return ()) <|> eof)
       if (x:xs) `elem` keywords
         then pzero
         else spaces >> return (Sym . MyToken src $ x:xs)
@@ -144,7 +159,7 @@ str = try $ do
   spaces
   return . Sym $ MyToken src ('"' : x ++ "\"")
 
-tokenize = strides (empty <|> str <|> sym)
+tokenize = strides' (empty <|> str <|> sym)
   p
   "{" "}" ";"
   where
