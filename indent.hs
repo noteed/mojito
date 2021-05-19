@@ -1,19 +1,15 @@
 {-# Language OverloadedStrings #-}
 module Main where
 
-import Prelude hiding (readFile)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-import System.Environment.UTF8 (getArgs)
-import System.IO.UTF8 (readFile)
+import System.Environment (getArgs)
 import Text.ParserCombinators.Parsec
 
 import GHC.Exts (IsString(..))
 
 import Text.Syntactical
-import qualified Text.Syntactical as S
-import Text.Syntactical.String
 import Language.Mojito.Syntax.Indent (Tree(..), strides')
 
 
@@ -35,7 +31,7 @@ instance Token MyToken where
   consider (MyToken _ a) (MyToken _ b) = a == b
 
 -- Rewrite the sub-expressions as we apply the operator.
-myOperator pt as = case pts of
+myOperator o as = case pts of
   "()" -> case as of
     [List [Atom (MyToken Internal ","),a,b]] ->
       tuple [] (head as)
@@ -47,7 +43,7 @@ myOperator pt as = case pts of
   "``" -> case as of
     [a,b,c] -> List [b,a,c]
   _ -> List $ (Atom $ MyToken Internal pts):as
-  where pts = concatMap toString $ previousPart pt ++ [partSymbol pt]
+  where pts = concatMap toString $ symbols o
 
 tuple xs (List [Atom (MyToken Internal ","),a,b]) = tuple (a:xs) b
 tuple xs b = List (a : reverse (b:xs))
@@ -63,7 +59,7 @@ list _ xs b = List (reverse (b:xs))
 table0 :: Table MyToken
 table0 = buildTable
  [ [ closed "(" Distfix ")"
-   , closed "⟨" SExpression "⟩"
+   , closed_ "⟨" SExpression "⟩"
    , closed "[" Distfix "]"
    , closed "[" Distfix "|" `distfix` "]"
    , closed "{" Distfix "}"
@@ -131,7 +127,7 @@ sym :: P (Tree MyToken)
 sym = try $ do
   src <- source
   x <- noneOf "\t\n "
-  if x `elem` "`,()⟨⟩[]"
+  if x `elem` ("`,()⟨⟩[]" :: String)
     then spaces >> return (Sym $ MyToken src [x])
     else do
       xs <- manyTill anyChar (lookAhead $ (oneOf "`,()⟨⟩[]\t\n " >> return ()) <|> eof)
