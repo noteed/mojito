@@ -31,8 +31,8 @@ newtype Inf a = Inf
     ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a
   }
   deriving
-    (Functor, Monad, MonadState Inferencer,
-    MonadError String, MonadWriter [Note])
+    (Applicative, Functor, Monad, MonadState Inferencer,
+    MonadError String, MonadFail, MonadWriter [Note])
 
 -- Creates a unique type variable from a string.
 fresh :: MonadState Inferencer m => String -> m Simple

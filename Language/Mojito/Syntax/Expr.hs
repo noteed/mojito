@@ -1,6 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances #-}
 module Language.Mojito.Syntax.Expr where
 
+import Prelude hiding ((<>))
+
 import Data.List (intersperse, nub)
 import Text.PrettyPrint.HughesPJClass
 

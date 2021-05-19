@@ -19,7 +19,7 @@ import Language.Mojito.Syntax.Types
 data ExprBuilder = ExprBuilder { ebNextId :: Int }
 
 newtype ExprT m a = ExprT { runExprT :: StateT ExprBuilder m a }
-  deriving (Monad, MonadIO, MonadTrans, MonadState ExprBuilder, MonadError e)
+  deriving (Applicative, Functor, Monad, MonadIO, MonadTrans, MonadState ExprBuilder, MonadError e)
 
 newId :: Monad m => ExprT m Int
 newId = do

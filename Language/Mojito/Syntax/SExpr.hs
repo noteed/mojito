@@ -2,7 +2,7 @@
 module Language.Mojito.Syntax.SExpr where
 
 import Text.ParserCombinators.Parsec hiding (State)
-import Control.Monad.Error
+import Control.Monad.Except
 
 ----------------------------------------------------------------------
 -- S-Expressions
