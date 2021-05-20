@@ -4,9 +4,9 @@
 
 module Language.Mojito.Inference.Cardelli.Cardelli where
 
+import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Expr
@@ -23,7 +23,7 @@ import Language.Mojito.Inference.Cardelli.Inferencer
 infer :: Expr a -> Env -> ((Either String Simple, [Note]), Inferencer)
 infer e env = runIdentity $
   runStateT
-    (runWriterT . runErrorT . runInf $ analyzeExpr e env [])
+    (runWriterT . runExceptT . runInf $ analyzeExpr e env [])
     inferencer
 
 -- e ::= x | if e e e | fun x e | e e | let decl e
@@ -106,15 +106,16 @@ analyzeExpr e env ng = case e of
     compose s2
     substitute t2
   Fun _ x e2 -> do
-    t1@(TyVar v) <- fresh x
-    let env' = extend x t1 env
+    v <- fresh x
+    let t1 = TyVar v
+        env' = extend x t1 env
         ng' = v : ng
     t2 <- analyzeExpr e2 env' ng'
     substitute (fun t1 t2)
   App _ e1 e2 -> do
     t1 <- analyzeExpr e1 env ng
     t2 <- analyzeExpr e2 env ng
-    t3 <- fresh "return"
+    t3 <- fmap TyVar (fresh "return")
     s <- unify t1 (fun t2 t3)
     compose s
     substitute t3
@@ -143,9 +144,9 @@ analyzeRecBind :: Decl a -> Env -> [String] -> Inf (Env, [String])
 analyzeRecBind decl env ng = case decl of
   Def x _ -> do
     note "Def (bind)"
-    t1@(TyVar v) <- fresh x
+    v <- fresh x
     note $ x ++ " is renamed " ++ v
-    return (extend x t1 env, v : ng)
+    return (extend x (TyVar v) env, v : ng)
   Seq d1 d2 -> do
     (env', ng') <- analyzeRecBind d1 env ng
     analyzeRecBind d2 env' ng'

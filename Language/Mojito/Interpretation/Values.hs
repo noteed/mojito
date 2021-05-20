@@ -57,4 +57,3 @@ intLit _ v = Int32 $ fromInteger v
 
 strLit :: Simple -> String -> Val
 strLit _ v = String v
-

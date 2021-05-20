@@ -54,4 +54,3 @@ showNarrative n = case n of
   StepSExpr _ _ err -> "Option declaration error: " ++ err
   StepExpr _ _ _ err -> "Type error: " ++ err
   StepTypedExpr _ _ _ _ _ _ -> "Everything's ok."
-

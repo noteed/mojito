@@ -50,4 +50,3 @@ typedExpr str = thediv $
   thespan (stringToHtml "typed expression")
   +++ anchor (stringToHtml "show/hide") ! [identifier "toggle-typed-expr", href "#"]
   +++ thediv (pre (thecode $ stringToHtml str)) ! [identifier "typed-expr", theclass "box"]
-

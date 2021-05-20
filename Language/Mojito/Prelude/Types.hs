@@ -62,4 +62,3 @@ mat3x3 a = TyCon "Mat3x3" `TyApp` a
 
 mat4x4 :: Simple -> Simple
 mat4x4 a = TyCon "Mat4x4" `TyApp` a
-

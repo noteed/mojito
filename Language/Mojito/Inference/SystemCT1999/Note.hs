@@ -15,4 +15,3 @@ data Note =
   | NApp Int (Expr Int) (Expr Int) Context (Maybe (Constrained,Context))
   | NHasType Int (Expr Int) Simple Context (Maybe (Constrained,Context))
   | NIf Int (Expr Int) (Expr Int) (Expr Int) Context (Maybe (Constrained,Context))
-

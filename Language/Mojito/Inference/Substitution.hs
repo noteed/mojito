@@ -166,4 +166,3 @@ restr' k vs | null (v \\ vs )= k'
 
 restrictCtx :: Context -> String -> Context
 restrictCtx (Context xs) s = Context $ filter ((== s) . fst) xs
-

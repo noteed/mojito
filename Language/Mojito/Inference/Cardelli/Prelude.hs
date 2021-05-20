@@ -19,4 +19,3 @@ someEnvironment =
   , ("iszero", fun int32 bool)
   , ("+", fun int32 (fun int32 int32))
   ]
-

@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Language.Mojito.Inference.Unification where
 
-import Control.Monad.Error
+import Control.Monad.Except
 
 import Language.Mojito.Syntax.Types
 import Language.Mojito.Inference.Substitution

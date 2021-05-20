@@ -201,4 +201,3 @@ showAlt f (Alternative p e) = showPat f p ++ " -> " ++ showExpr 0 f e
 showPat :: (t -> String) -> Pattern t -> String
 showPat f (PatVar k v) = v ++ " : " ++ f k
 showPat f (PatCon _ k2 c ps) = c ++ " : " ++ f k2 ++ concatMap (showPat f) ps
-

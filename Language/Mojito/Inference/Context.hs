@@ -19,5 +19,3 @@ types g x = map snd $ filter ((== x) . fst) (ctxAssoc g)
 
 unionContexts :: [Context] -> Context
 unionContexts gs = Context (foldl union [] $ map ctxAssoc gs)
-
-

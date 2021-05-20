@@ -57,5 +57,3 @@ someEnvironment =
   , (("Mat3x3", foldr fun (mat3x3 $ TyVar "a") (replicate 9 $ TyVar "a")), Constructor "Mat3x3" (replicate 9 $ TyVar "a") [])
   , (("Mat4x4", foldr fun (mat4x4 $ TyVar "a") (replicate 16 $ TyVar "a")), Constructor "Mat4x4" (replicate 16 $ TyVar "a") [])
   ]
-
-

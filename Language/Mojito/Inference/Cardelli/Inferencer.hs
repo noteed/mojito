@@ -1,9 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
 module Language.Mojito.Inference.Cardelli.Inferencer where
 
+import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Types
@@ -28,25 +28,26 @@ inferencer = Inferencer
 
 newtype Inf a = Inf
   { runInf ::
-    ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a
+    ExceptT String (WriterT [Note] (StateT Inferencer Identity)) a
   }
   deriving
     (Applicative, Functor, Monad, MonadState Inferencer,
-    MonadError String, MonadFail, MonadWriter [Note])
+    MonadError String, MonadWriter [Note])
 
--- Creates a unique type variable from a string.
-fresh :: MonadState Inferencer m => String -> m Simple
+-- Creates a unique type variable from a string. The result must be wrapped in
+-- a TyVar.
+fresh :: MonadState Inferencer m => String -> m String
 fresh a = do
   n <- gets tiNextId
   modify (\s -> s { tiNextId = n + 1 })
-  return (TyVar $ a ++ show n)
+  return (a ++ show n)
 
 -- Given a type, returns the same type with all the
 -- generic variables renamed with fresh names.
 refresh :: MonadState Inferencer m => Simple -> [String] -> m Simple
 refresh t ng = do
   let gs = gvars t ng
-  gs' <- mapM fresh gs
+  gs' <- mapM (fmap TyVar . fresh) gs
   return $ subs (fromList $ zip gs gs') t
 
 -- Compose the given substitution with the current substitution.
@@ -69,4 +70,3 @@ note m = do
 
 recordType :: Int -> Simple -> Inf ()
 recordType k t = modify (\s -> s { tiTypings = (k,t) : tiTypings s })
-

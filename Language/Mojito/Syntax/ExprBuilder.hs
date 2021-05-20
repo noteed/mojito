@@ -1,8 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
 module Language.Mojito.Syntax.ExprBuilder where
 
+import Control.Monad.Except
 import Control.Monad.State
-import Control.Monad.Error
 
 import Data.List (partition)
 
@@ -241,4 +241,3 @@ definitionsToLet defs = case partition ((== "main") . fst) defs of
 definitionsToLet' :: Expr a -> [(String, (a, Expr a))] -> Expr a
 definitionsToLet' m ((a,(i,b)):ds) = Let i (Def a b) $ definitionsToLet' m ds
 definitionsToLet' m [] = m
-

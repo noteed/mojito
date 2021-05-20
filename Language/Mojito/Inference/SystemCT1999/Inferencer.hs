@@ -1,9 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
 module Language.Mojito.Inference.SystemCT1999.Inferencer where
 
+import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Types
@@ -28,24 +28,25 @@ inferencer = Inferencer
 
 newtype Inf a = Inf
   { runInf ::
-    ErrorT String (WriterT [Note] (StateT Inferencer Identity)) a
+    ExceptT String (WriterT [Note] (StateT Inferencer Identity)) a
   }
   deriving
     (Applicative, Functor, Monad, MonadState Inferencer,
-    MonadError String, MonadFail, MonadWriter [Note])
+    MonadError String, MonadWriter [Note])
 
--- Creates a unique type variable from a string.
-fresh :: MonadState Inferencer m => String -> m Simple
+-- Creates a unique type variable from a string. The result must be wrapped in
+-- a TyVar.
+fresh :: MonadState Inferencer m => String -> m String
 fresh a = do
   n <- gets tiNextId
   modify (\s -> s { tiNextId = n + 1 })
-  return (TyVar $ a ++ show n)
+  return (a ++ show n)
 
 -- Given a type, returns the constrained type with all the
 -- quantified variables renamed with fresh names.
 refresh :: MonadState Inferencer m => Type -> m Constrained
 refresh (Type gs c) = do
-  gs' <- mapM fresh gs
+  gs' <- mapM (fmap TyVar . fresh) gs
   return $ subs (fromList $ zip gs gs') c
 
 -- Compose the given substitution with the current substitution.
@@ -71,4 +72,3 @@ note m = do
 
 recordType :: Int -> Constrained -> Context -> Inf ()
 recordType k t g = modify (\s -> s { tiTypings = (k,(t,g)) : tiTypings s })
-

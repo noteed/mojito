@@ -11,9 +11,9 @@ module Language.Mojito.Inference.SystemCT1999.SystemCT1999 where
 import Data.List (groupBy, union, (\\))
 import Data.Maybe (mapMaybe)
 import Data.Function (on)
+import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Expr
@@ -35,11 +35,11 @@ import Language.Mojito.Inference.SystemCT1999.LCG
 -- Infers the typing of an expression in a context. This returns some logs, the state
 -- of the inference and either the typing or an error.
 infer :: [Simple] -> Expr Int -> Context -> ((Either String (Constrained,Context), [Note]), Inferencer)
-infer ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ pp e g) (inferencer { tiTypes = ts })
+infer ts e g = runIdentity $ runStateT (runWriterT $ runExceptT $ runInf $ pp e g) (inferencer { tiTypes = ts })
 
 -- TODO use infer + duplicate' instead
 infer' :: [Simple] -> Expr Int -> Context -> ((Either String (Expr Simple), [Note]), Inferencer)
-infer' ts e g = runIdentity $ runStateT (runWriterT $ runErrorT $ runInf $ go) (inferencer { tiTypes = ts })
+infer' ts e g = runIdentity $ runStateT (runWriterT $ runExceptT $ runInf $ go) (inferencer { tiTypes = ts })
   where go = do (c,g') <- pp e g
                 case kgs c g' of
                   [] -> throwError "no type."
@@ -289,7 +289,7 @@ domForType t ((TyApp (TyCon "->" `TyApp` t2) t'):ts) = case unify t t' of
 isTypeInScope :: MonadState Inferencer m => Simple -> m Bool
 isTypeInScope t = do
   let vs = tv t
-  vs' <- mapM fresh (tv t)
+  vs' <- mapM (fmap TyVar . fresh) (tv t)
   let t' = subs (fromList $ zip vs vs') t
   ts <- gets tiTypes
   return $ (not . null $ filter (isRight . unify t') ts)
@@ -312,7 +312,7 @@ pt :: String -> Context -> Inf (Constrained,Context)
 pt x g = do
   case g `types` x of
     [] -> do
-      a <- fresh "a"
+      a <- fmap TyVar (fresh "a")
       let a' = Constrained [] a
           ret = (a', Context [(x, Type [] $ a')])
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
@@ -323,7 +323,7 @@ pt x g = do
 --      note $ "pt " ++ x ++ showContext g ++ " = " ++ (\(i,j) -> showConstrained i ++ showContext j) ret
       return ret
     ti -> do
-      TyVar x' <- fresh "b"
+      x' <- fresh "b"
       let g' = tsubs x x' g
       t <- lcg ti
       let ret = (Constrained [Constraint x' t] t, g')
@@ -416,7 +416,7 @@ pp e g =
     cgs_ <- mapM (ppAlt g) alts
     Constrained k1_ t1_ <- substitute c1_
     cgs' <- mapM (\(a,b) -> do { a' <- substitute a ; b' <- substitute' b ; return (a',b') }) cgs_
-    a <- fresh "l"
+    a <- fmap TyVar (fresh "l")
     s <- unify' (zip (repeat $ t1_ `fun` a) $ map (smpl . fst) cgs')
     compose "Case" s
     cgs <- mapM (\(a_,b) -> do { a' <- substitute a_ ; b' <- substitute' b ; return (a',b') }) cgs'
@@ -452,7 +452,7 @@ pp e g =
 -}
 
   Fun key u e1 -> do
-    t' <- fresh "i"
+    t' <- fmap TyVar (fresh "i")
     let gext = lamExtend g u (typed t')
     (Constrained k t, g'_) <- pp e1 gext
     t'' <- substitute t'
@@ -466,7 +466,7 @@ pp e g =
     (c1_, g1_) <- pp e1 g
     (Constrained k2_ t2, g2_) <- pp e2 g
     Constrained k1_ t1_ <- substitute c1_
-    a <- fresh "j"
+    a <- fmap TyVar (fresh "j")
 --    note $ "_unify " ++ showSimple t1 ++ " " ++ showSimple (t2 `fun` TyVar a) ++ " " ++ show (tv' g)
 --    let s = case _unify t1 (t2 `fun` TyVar a) (tv' g) of
 --    FIXME This should use _unify ('Unify' in the paper) but I don't know exactly what it is.
@@ -539,7 +539,7 @@ ppAlt :: Context -> Alternative Int -> Inf (Constrained,Context)
 ppAlt g (Alternative p e) = do
   let pvs = map fst $ patVars p
       pe = patExpr p
-  ts <- replicateM (length pvs) (fresh "k")
+  ts <- replicateM (length pvs) (fmap TyVar (fresh "k"))
   let gext = foldl lamExtend' g (zip pvs (map typed ts))
   (c1_, g1_) <- pp pe gext
   (Constrained k2 t2, g2) <- pp e gext
@@ -629,4 +629,3 @@ isLeft _ = False
 isRight :: Either a b -> Bool
 isRight (Left _) = False
 isRight _ = True
-

@@ -1,9 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
 module Language.Mojito.Inference.SystemCT1999.LCG where
 
+import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Error
 import Control.Monad.Writer
 
 import Language.Mojito.Syntax.Types
@@ -14,7 +14,7 @@ import Language.Mojito.Inference.SystemCT1999.Inferencer
 
 runLcg :: [Type] -> Simple
 runLcg ts =
-  let Right r = fst $ runIdentity $ evalStateT (runWriterT $ runErrorT $ runInf $ lcg ts) inferencer
+  let Right r = fst $ runIdentity $ evalStateT (runWriterT $ runExceptT $ runInf $ lcg ts) inferencer
   in r
 
 -- Function lcg is implemented along the definition found
@@ -32,12 +32,12 @@ lcg' [t] s = return (t,s)
 lcg' [t1, t2] s = case reverseLookup (t1,t2) s of
   Just a -> return (TyVar a,s)
   Nothing -> if nargs t1 /= nargs t2
-             then do TyVar a' <- fresh "c"
+             then do a' <- fresh "c"
                      return (TyVar a', s `dag` [(a', (t1, t2))])
              else do let (x ,ts ) = cargs t1 -- FIXME why is there always at least one arg ?
                          (x',ts') = cargs t2
                      (x0,s0) <- if x == x' then return (x,s)
-                                           else do TyVar a <- fresh "d"
+                                           else do a <- fresh "d"
                                                    return (TyVar a, s `dag` [(a,(x,x'))])
                      (ti,si) <- lcgAccum ts ts' s0
                      return (foldl TyApp x0 ti, si)
@@ -76,4 +76,3 @@ reverseLookup k = lookup k . map swap
   where
     swap :: (a,b) -> (b,a)
     swap (a,b) = (b,a)
-

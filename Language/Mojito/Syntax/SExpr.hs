@@ -177,4 +177,3 @@ expo = try $ do
   s <- optionMaybe (oneOf "+-")
   d <- many1 digit
   return $ "e" ++ maybe "" (:[]) s ++ d
-
